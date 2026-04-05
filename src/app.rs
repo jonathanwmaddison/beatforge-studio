@@ -291,6 +291,12 @@ pub struct BeatForge {
     // Preset browser
     show_synth_presets: bool,
 
+    // Automation recording — when enabled, knob/slider changes during playback get written to automation
+    auto_rec: bool,
+
+    // Piano roll snap grid (in steps: 1.0 = 1 step, 0.5 = half step, 0.25 = quarter step)
+    piano_snap: f32,
+
     // Sequencer lane visibility
     show_velocity_lane: bool,
     show_probability_lane: bool,
@@ -385,6 +391,8 @@ impl BeatForge {
             midi_rx,
             midi_connected,
             midi_device_name,
+            auto_rec: false,
+            piano_snap: 1.0,
             show_velocity_lane: true,
             show_probability_lane: false,
             context_menu_row: None,
@@ -947,6 +955,14 @@ impl eframe::App for BeatForge {
                     self.step_cursor = 0;
                 }
 
+                // Automation recording toggle
+                let ar_color = if self.auto_rec { Color32::from_rgb(239, 68, 68) } else { Color32::from_gray(28) };
+                if ui.add(Button::new(RichText::new("A.REC").size(7.0)
+                    .color(if self.auto_rec { Color32::BLACK } else { dim() }))
+                    .fill(ar_color).min_size(vec2(32.0, 16.0))).clicked() {
+                    self.auto_rec = !self.auto_rec;
+                }
+
                 // Tap tempo
                 if ui.button(RichText::new("TAP").size(10.0).color(dim())).clicked() {
                     let time = ui.input(|i| i.time);
@@ -1256,7 +1272,10 @@ impl eframe::App for BeatForge {
                 let before = self.volumes[sp];
                 ui.add(Slider::new(&mut self.volumes[sp], 0.0..=1.0).show_value(false));
                 ui.label(RichText::new(format!("{}", (self.volumes[sp] * 100.0) as u32)).size(10.0).color(dim()).family(FontFamily::Monospace));
-                if self.volumes[sp] != before { self.engine.send(Cmd::SetPadVol(sp, self.volumes[sp])); }
+                if self.volumes[sp] != before {
+                    self.engine.send(Cmd::SetPadVol(sp, self.volumes[sp]));
+                    self.record_automation(AutoTarget::Volume, sp, self.volumes[sp]);
+                }
             });
 
             // PAN
@@ -1289,7 +1308,10 @@ impl eframe::App for BeatForge {
                 let freq_text = if self.filters[sp] >= 1000.0 { format!("{:.1}k", self.filters[sp] / 1000.0) }
                     else { format!("{:.0}", self.filters[sp]) };
                 ui.label(RichText::new(freq_text).size(10.0).color(dim()).family(FontFamily::Monospace));
-                if self.filters[sp] != before { self.engine.send(Cmd::SetPadFilter(sp, self.filters[sp])); }
+                if self.filters[sp] != before {
+                    self.engine.send(Cmd::SetPadFilter(sp, self.filters[sp]));
+                    self.record_automation(AutoTarget::FilterCutoff, sp, self.filters[sp]);
+                }
             });
 
             // Reverse + Load buttons
@@ -1789,7 +1811,27 @@ impl BeatForge {
                 }
             }
 
-            // Step indicator bar
+            // Sweeping playhead line (vertical line through entire grid)
+            if self.playing && current_step >= 0 && (current_step as usize) < num_steps {
+                let ph_x = grid_left + current_step as f32 * cell_w + cell_w * 0.5;
+                painter.line_segment(
+                    [pos2(ph_x, rect.top()), pos2(ph_x, rect.top() + header_h + num_rows as f32 * row_h + 8.0)],
+                    Stroke::new(2.0, Color32::from_rgba_premultiplied(245, 158, 11, 180)),
+                );
+                // Playhead triangle at top
+                let tri_size = 5.0;
+                painter.add(egui::Shape::convex_polygon(
+                    vec![
+                        pos2(ph_x - tri_size, rect.top()),
+                        pos2(ph_x + tri_size, rect.top()),
+                        pos2(ph_x, rect.top() + tri_size * 1.5),
+                    ],
+                    accent(),
+                    Stroke::NONE,
+                ));
+            }
+
+            // Step indicator bar (bottom)
             for step in 0..num_steps {
                 let x = grid_left + step as f32 * cell_w + 1.0;
                 let y = rect.top() + header_h + num_rows as f32 * row_h + 4.0;
@@ -2879,6 +2921,21 @@ impl BeatForge {
 
             ui.separator();
 
+            // Snap grid selector
+            ui.label(RichText::new("SNAP").size(8.0).color(muted_color()).family(FontFamily::Monospace));
+            let snaps = [(1.0, "1"), (0.5, "1/2"), (0.25, "1/4")];
+            for (val, label) in snaps {
+                let active = (self.piano_snap - val).abs() < 0.01;
+                if ui.add(Button::new(RichText::new(label).size(7.0)
+                    .color(if active { Color32::BLACK } else { dim() }))
+                    .fill(if active { accent() } else { Color32::from_gray(28) })
+                    .min_size(vec2(20.0, 14.0))).clicked() {
+                    self.piano_snap = val;
+                }
+            }
+
+            ui.separator();
+
             // Scale selector
             ui.label(RichText::new("SCALE").size(8.0).color(muted_color()).family(FontFamily::Monospace));
             let scales = [Scale::Chromatic, Scale::Major, Scale::Minor, Scale::Pentatonic, Scale::Blues, Scale::Dorian, Scale::Mixolydian];
@@ -3040,7 +3097,9 @@ impl BeatForge {
                                 self.note_patterns[sp].notes.remove(idx);
                             } else {
                                 let snapped = self.piano_scale.snap(note);
-                                self.note_patterns[sp].add_note(snapped, step.floor(), 1.0, 0.8);
+                                let snap = self.piano_snap;
+                                let snapped_step = (step / snap).round() * snap;
+                                self.note_patterns[sp].add_note(snapped, snapped_step, snap.max(0.25), 0.8);
                                 // Preview the note
                                 self.engine.send(Cmd::NoteOn { pad: sp, note: snapped, velocity: 0.8 });
                             }
@@ -3732,6 +3791,25 @@ impl BeatForge {
                 }
             }
         }
+    }
+
+    /// Record a parameter change to automation if auto_rec is enabled
+    fn record_automation(&mut self, target: AutoTarget, pad: usize, value: f32) {
+        if !self.auto_rec || !self.playing { return; }
+        let step = self.engine.current_step();
+        if step < 0 { return; }
+        let step = step as usize;
+
+        // Find or create lane
+        let lane_idx = self.automation.lanes.iter().position(|l| l.pad == pad && l.target == target);
+        let lane_idx = lane_idx.unwrap_or_else(|| {
+            self.automation.add_lane(target, pad, self.num_steps);
+            self.automation.lanes.len() - 1
+        });
+
+        self.automation.lanes[lane_idx].set(step, value);
+        self.engine.send(Cmd::SetAutomation(self.automation.clone()));
+        self.project_dirty = true;
     }
 
     fn mark_dirty(&mut self) {
