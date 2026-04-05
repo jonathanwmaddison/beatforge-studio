@@ -294,8 +294,12 @@ pub struct BeatForge {
     // Automation recording — when enabled, knob/slider changes during playback get written to automation
     auto_rec: bool,
 
-    // Piano roll snap grid (in steps: 1.0 = 1 step, 0.5 = half step, 0.25 = quarter step)
+    // Piano roll snap grid
     piano_snap: f32,
+
+    // Loop region (None = loop entire pattern)
+    loop_start: Option<usize>,
+    loop_end: Option<usize>,
 
     // Sequencer lane visibility
     show_velocity_lane: bool,
@@ -393,6 +397,8 @@ impl BeatForge {
             midi_device_name,
             auto_rec: false,
             piano_snap: 1.0,
+            loop_start: None,
+            loop_end: None,
             show_velocity_lane: true,
             show_probability_lane: false,
             context_menu_row: None,
@@ -642,6 +648,18 @@ impl eframe::App for BeatForge {
             if input.modifiers.command && input.key_pressed(Key::V) {
                 self.paste_pattern();
             }
+            // Cmd+D to duplicate pattern to next bank
+            if input.modifiers.command && input.key_pressed(Key::D) {
+                self.duplicate_pattern();
+            }
+            // F1-F8 switch pattern banks
+            let f_keys = [Key::F1, Key::F2, Key::F3, Key::F4, Key::F5, Key::F6, Key::F7, Key::F8];
+            for (i, &fkey) in f_keys.iter().enumerate() {
+                if input.key_pressed(fkey) {
+                    self.active_bank = i;
+                    self.sync_pattern();
+                }
+            }
             // T for tap tempo
             if input.key_pressed(Key::T) {
                 self.tap_tempo(input.time);
@@ -846,11 +864,17 @@ impl eframe::App for BeatForge {
                 ui.separator();
                 ui.add_space(4.0);
 
-                // BPM
+                // BPM (slider + click-to-type value)
                 ui.label(RichText::new("BPM").size(9.0).color(dim()).family(FontFamily::Monospace));
                 let bpm_before = self.bpm;
                 ui.add(Slider::new(&mut self.bpm, 20.0..=300.0).show_value(false).fixed_decimals(0));
-                ui.label(RichText::new(format!("{:.0}", self.bpm)).size(14.0).strong().color(accent()).family(FontFamily::Monospace));
+                // Clickable BPM display — click to type exact value
+                ui.add(egui::DragValue::new(&mut self.bpm)
+                    .range(20.0..=300.0)
+                    .speed(0.5)
+                    .fixed_decimals(0)
+                    .prefix("")
+                    .custom_formatter(|v, _| format!("{:.0}", v)));
                 if self.bpm != bpm_before {
                     self.engine.send(Cmd::SetBpm(self.bpm));
                 }
@@ -1680,9 +1704,23 @@ impl BeatForge {
                 self.seq_zoom = 1.0;
             }
             if self.step_input {
-                ui.label(RichText::new(format!("STEP CURSOR: {}", self.step_cursor + 1))
+                ui.label(RichText::new(format!("STEP: {}", self.step_cursor + 1))
                     .size(9.0).color(Color32::from_rgb(6, 182, 212)).family(FontFamily::Monospace));
-                ui.label(RichText::new("← → to move").size(7.0).color(muted_color()));
+            }
+
+            // Loop region controls
+            if self.loop_start.is_some() || self.loop_end.is_some() {
+                let ls = self.loop_start.unwrap_or(0) + 1;
+                let le = self.loop_end.unwrap_or(self.num_steps - 1) + 1;
+                ui.label(RichText::new(format!("LOOP: {ls}-{le}"))
+                    .size(8.0).color(Color32::from_rgb(34, 197, 94)).family(FontFamily::Monospace));
+                if ui.add(Button::new(RichText::new("×").size(9.0).color(red()))
+                    .min_size(vec2(14.0, 14.0))).clicked() {
+                    self.loop_start = None;
+                    self.loop_end = None;
+                }
+            } else {
+                ui.label(RichText::new("Shift+click step # to set loop").size(7.0).color(muted_color()));
             }
         });
 
@@ -1811,6 +1849,34 @@ impl BeatForge {
                 }
             }
 
+            // Loop region markers
+            if let (Some(ls), Some(le)) = (self.loop_start, self.loop_end) {
+                let lx_start = grid_left + ls as f32 * cell_w;
+                let lx_end = grid_left + (le + 1) as f32 * cell_w;
+                let loop_rect = Rect::from_min_max(
+                    pos2(lx_start, rect.top()),
+                    pos2(lx_end, rect.top() + header_h + num_rows as f32 * row_h),
+                );
+                // Dim areas outside the loop
+                if ls > 0 {
+                    painter.rect_filled(
+                        Rect::from_min_max(pos2(grid_left, rect.top()), pos2(lx_start, loop_rect.bottom())),
+                        0.0, Color32::from_black_alpha(60),
+                    );
+                }
+                if le + 1 < num_steps {
+                    painter.rect_filled(
+                        Rect::from_min_max(pos2(lx_end, rect.top()), pos2(grid_left + num_steps as f32 * cell_w, loop_rect.bottom())),
+                        0.0, Color32::from_black_alpha(60),
+                    );
+                }
+                // Loop boundary lines
+                painter.line_segment([pos2(lx_start, rect.top()), pos2(lx_start, loop_rect.bottom())],
+                    Stroke::new(1.5, Color32::from_rgb(34, 197, 94)));
+                painter.line_segment([pos2(lx_end, rect.top()), pos2(lx_end, loop_rect.bottom())],
+                    Stroke::new(1.5, Color32::from_rgb(239, 68, 68)));
+            }
+
             // Sweeping playhead line (vertical line through entire grid)
             if self.playing && current_step >= 0 && (current_step as usize) < num_steps {
                 let ph_x = grid_left + current_step as f32 * cell_w + cell_w * 0.5;
@@ -1859,6 +1925,29 @@ impl BeatForge {
                             self.soloed[pad_idx] = !self.soloed[pad_idx];
                             self.engine.send(Cmd::SetPadSolo(pad_idx, self.soloed[pad_idx]));
                             return;
+                        }
+                    }
+
+                    // Shift+click on step header → set loop region
+                    let in_header = pos.y < rect.top() + header_h;
+                    if response.clicked() && pos.x >= grid_left && in_header {
+                        let step = ((pos.x - grid_left) / cell_w) as usize;
+                        if step < num_steps && ui.input(|i| i.modifiers.shift) {
+                            if self.loop_start.is_none() {
+                                self.loop_start = Some(step);
+                            } else if self.loop_end.is_none() {
+                                let start = self.loop_start.unwrap();
+                                if step > start {
+                                    self.loop_end = Some(step);
+                                } else {
+                                    self.loop_end = self.loop_start;
+                                    self.loop_start = Some(step);
+                                }
+                            } else {
+                                // Reset and start new selection
+                                self.loop_start = Some(step);
+                                self.loop_end = None;
+                            }
                         }
                     }
 
@@ -3701,6 +3790,15 @@ impl BeatForge {
 
     fn copy_pattern(&mut self) {
         self.pattern_clipboard = Some(self.banks[self.active_bank].clone());
+    }
+
+    fn duplicate_pattern(&mut self) {
+        // Copy current bank to the next bank
+        let next = (self.active_bank + 1) % 8;
+        self.push_undo();
+        self.banks[next] = self.banks[self.active_bank].clone();
+        self.active_bank = next;
+        self.sync_pattern();
     }
 
     fn paste_pattern(&mut self) {
