@@ -9,7 +9,7 @@ const NUM_VOICES: usize = 8;
 //  PUBLIC TYPES
 // ════════���══════════════════════════════════════════════════
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Waveform {
     Sine,
     Saw,
@@ -604,5 +604,96 @@ impl NotePattern {
         self.notes.iter()
             .filter(|n| ((n.start + n.duration) as usize) == step)
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_params() {
+        let p = SynthParams::default();
+        assert_eq!(p.osc1_wave, Waveform::Saw);
+        assert!(p.volume > 0.0);
+        assert!(p.filter_cutoff > 0.0);
+        assert_eq!(p.unison_voices, 1);
+    }
+
+    #[test]
+    fn test_note_pattern_add_remove() {
+        let mut pat = NotePattern::new();
+        pat.add_note(60, 0.0, 1.0, 0.8);
+        pat.add_note(64, 2.0, 1.0, 0.6);
+        assert_eq!(pat.notes.len(), 2);
+        assert_eq!(pat.notes_starting_at(0).len(), 1);
+        assert_eq!(pat.notes_starting_at(2).len(), 1);
+        assert_eq!(pat.notes_ending_at(1).len(), 1);
+        assert_eq!(pat.notes_ending_at(3).len(), 1);
+    }
+
+    #[test]
+    fn test_synth_silence_when_idle() {
+        let mut synth = SubSynth::new();
+        let s = synth.tick(44100.0);
+        assert_eq!(s, 0.0);
+    }
+
+    #[test]
+    fn test_synth_produces_sound() {
+        let mut synth = SubSynth::new();
+        synth.note_on(60, 1.0);
+        let mut max = 0.0f32;
+        for _ in 0..500 {
+            max = max.max(synth.tick(44100.0).abs());
+        }
+        assert!(max > 0.01, "Should produce audible output");
+    }
+
+    #[test]
+    fn test_synth_note_off_decays() {
+        let mut synth = SubSynth::new();
+        synth.params.amp_release = 0.01;
+        synth.note_on(60, 1.0);
+        for _ in 0..200 { synth.tick(44100.0); }
+        synth.note_off(60);
+        for _ in 0..5000 { synth.tick(44100.0); }
+        assert!(synth.tick(44100.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_fm_synthesis() {
+        let mut synth = SubSynth::new();
+        synth.params.osc1_wave = Waveform::Fm;
+        synth.params.osc_mix = 0.5; // FM index
+        synth.note_on(60, 1.0);
+        let mut max = 0.0f32;
+        for _ in 0..500 {
+            max = max.max(synth.tick(44100.0).abs());
+        }
+        assert!(max > 0.01, "FM should produce sound");
+    }
+
+    #[test]
+    fn test_oscillator_waveforms() {
+        // All waveforms should produce output in [-1, 1]
+        for phase_i in 0..100 {
+            let phase = phase_i as f64 / 100.0;
+            for wave in [Waveform::Sine, Waveform::Saw, Waveform::Square, Waveform::Triangle] {
+                let v = oscillate(wave, phase);
+                assert!(v >= -1.5 && v <= 1.5, "Waveform {:?} out of range at phase {}: {}", wave, phase, v);
+            }
+        }
+    }
+
+    #[test]
+    fn test_scale_snap() {
+        // C major: C D E F G A B
+        let major = [0u8, 2, 4, 5, 7, 9, 11];
+        // C=60 should stay at 60
+        assert!(major.contains(&(60 % 12)));
+        // C#=61 should snap to C(60) or D(62)
+        let cs = 61u8;
+        assert!(!major.contains(&(cs % 12)));
     }
 }

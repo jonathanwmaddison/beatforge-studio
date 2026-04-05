@@ -251,3 +251,63 @@ impl ProjectData {
         Ok(project)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_new_project() {
+        let p = ProjectData::new();
+        assert_eq!(p.version, 1);
+        assert_eq!(p.bpm, 90.0);
+        assert_eq!(p.name, "Untitled");
+        assert_eq!(p.stereo_width, 1.0);
+    }
+
+    #[test]
+    fn test_save_load_roundtrip() {
+        let mut p = ProjectData::new();
+        p.bpm = 145.0;
+        p.name = "Test".to_string();
+        p.master_vol = 0.65;
+        p.reverb_mix = 0.25;
+        p.stereo_width = 1.5;
+        p.enhancer_amount = 0.4;
+
+        // Need some pad data
+        for _ in 0..8 {
+            p.banks.push(vec![vec![0u8; 64]; 16]);
+        }
+        for _ in 0..16 {
+            p.pad_names.push("TEST".to_string());
+            p.volumes.push(0.7);
+            p.pans.push(0.0);
+            p.pitches.push(0.0);
+            p.filters.push(20000.0);
+            p.reversed.push(false);
+            p.trim_start.push(0.0);
+            p.trim_end.push(1.0);
+            p.muted.push(false);
+            p.soloed.push(false);
+            p.synth_assigned.push(false);
+            p.reverb_sends.push(0.0);
+            p.delay_sends.push(0.0);
+            p.sidechain_active.push(false);
+            p.fx_params.push([0.0; 12]);
+        }
+
+        let tmp = std::env::temp_dir().join("beatforge_test_roundtrip.bfp");
+        p.save(&tmp).unwrap();
+
+        let loaded = ProjectData::load(&tmp).unwrap();
+        assert!((loaded.bpm - 145.0).abs() < 0.1);
+        assert_eq!(loaded.name, "Test");
+        assert!((loaded.master_vol - 0.65).abs() < 0.01);
+        assert!((loaded.reverb_mix - 0.25).abs() < 0.01);
+        assert!((loaded.stereo_width - 1.5).abs() < 0.01);
+        assert!((loaded.enhancer_amount - 0.4).abs() < 0.01);
+
+        std::fs::remove_file(&tmp).ok();
+    }
+}
