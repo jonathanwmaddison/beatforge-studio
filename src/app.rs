@@ -336,6 +336,9 @@ pub struct BeatForge {
     browser_files: Vec<(String, std::path::PathBuf, bool)>, // (name, path, is_dir)
     browser_open: bool,
 
+    // Pad context menu
+    pad_context_menu: Option<(usize, Pos2)>, // (pad_idx, position)
+
     // Channel settings popup
     show_channel_settings: Option<usize>,
 
@@ -418,6 +421,7 @@ impl BeatForge {
             browser_path: dirs_home().join("Desktop"),
             browser_files: Vec::new(),
             browser_open: false,
+            pad_context_menu: None,
             show_channel_settings: None,
             project_name: "Untitled".to_string(),
             project_dirty: false,
@@ -655,10 +659,10 @@ impl eframe::App for BeatForge {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let current_step = self.engine.current_step();
 
-        // Limit idle repaint rate to save CPU (only repaint at 30fps during playback)
-        if !self.playing && !self.exporting && self.note_repeat_held_pad.is_none() {
-            // When idle, only repaint every 100ms (10fps) — enough for UI responsiveness
-            ctx.request_repaint_after(std::time::Duration::from_millis(100));
+        // Only request repaint when there's active animation
+        // When truly idle, egui repaints only on user input (mouse/keyboard)
+        if self.flash_pad.is_some() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(120));
         }
 
         // Window title is set on save/load/new — not every frame
@@ -1404,6 +1408,23 @@ impl eframe::App for BeatForge {
                     }
                 }
             }
+            // Right-click on pad → context menu
+            if response.secondary_clicked() {
+                if let Some(pos) = response.interact_pointer_pos() {
+                    for (di, &pad_idx) in PAD_DISPLAY.iter().enumerate() {
+                        let col = di % 4;
+                        let row = di / 4;
+                        let x = origin.x + col as f32 * (pad_size + gap);
+                        let y = origin.y + row as f32 * (pad_size + gap);
+                        let r = Rect::from_min_size(pos2(x, y), vec2(pad_size, pad_size));
+                        if r.contains(pos) {
+                            self.pad_context_menu = Some((pad_idx, pos));
+                            self.selected_pad = pad_idx;
+                            break;
+                        }
+                    }
+                }
+            }
             // Release note repeat on pointer up
             if response.drag_stopped() || (!response.is_pointer_button_down_on() && self.note_repeat_held_pad.is_some()) {
                 self.note_repeat_held_pad = None;
@@ -1899,6 +1920,52 @@ impl eframe::App for BeatForge {
                     self.show_export = false;
                 }
             }
+        }
+
+        // Pad context menu
+        if let Some((pad_idx, menu_pos)) = self.pad_context_menu {
+            Window::new("pad_ctx")
+                .title_bar(false)
+                .fixed_pos(menu_pos)
+                .auto_sized()
+                .show(ctx, |ui| {
+                    ui.label(RichText::new(&self.pad_names[pad_idx]).size(10.0).strong().color(self.pad_colors[pad_idx]));
+                    ui.separator();
+                    if ui.button("Load Sample").clicked() {
+                        if let Some(path) = rfd::FileDialog::new()
+                            .add_filter("Audio", &["wav","wave","mp3","flac","ogg","aac","m4a"])
+                            .pick_file() {
+                            self.load_sample_file(pad_idx, &path);
+                        }
+                        self.pad_context_menu = None;
+                    }
+                    if ui.button("Assign Synth").clicked() {
+                        self.synth_assigned[pad_idx] = true;
+                        self.pad_types[pad_idx] = PadType::SubSynth;
+                        self.pad_names[pad_idx] = format!("SYNTH {}", pad_idx + 1);
+                        self.engine.send(Cmd::SetPadSynth(pad_idx, self.synth_params[pad_idx].clone()));
+                        self.bottom_view = BottomView::Synth;
+                        self.pad_context_menu = None;
+                    }
+                    if self.pad_types[pad_idx] == PadType::Sample {
+                        if ui.button(RichText::new("Remove Sample").color(red())).clicked() {
+                            self.engine.send(Cmd::RemoveSample(pad_idx));
+                            let info = audio::default_pad_info();
+                            self.pad_names[pad_idx] = info[pad_idx].name.to_string();
+                            self.pad_types[pad_idx] = if info[pad_idx].has_voice { PadType::Synth } else { PadType::Empty };
+                            self.pad_peaks[pad_idx] = None;
+                            self.pad_context_menu = None;
+                        }
+                    }
+                    if ui.button("Channel Settings").clicked() {
+                        self.show_channel_settings = Some(pad_idx);
+                        self.pad_context_menu = None;
+                    }
+                    ui.separator();
+                    if ui.button("Close").clicked() {
+                        self.pad_context_menu = None;
+                    }
+                });
         }
 
         // Channel settings popup
