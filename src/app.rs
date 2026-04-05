@@ -1997,6 +1997,41 @@ impl eframe::App for BeatForge {
                         if eq_changed {
                             self.engine.send(Cmd::SetPadEq(ch, eq.clone()));
                         }
+
+                        // EQ frequency response curve
+                        let curve_data = crate::eq::freq_response(eq, 44100.0, 80);
+                        let (_, curve_painter) = cols[1].allocate_painter(vec2(cols[1].available_width(), 60.0), Sense::hover());
+                        let cr = curve_painter.clip_rect();
+                        curve_painter.rect_filled(cr, 3.0, Color32::from_gray(12));
+
+                        // 0dB line
+                        let zero_y = cr.center().y;
+                        curve_painter.line_segment(
+                            [pos2(cr.left(), zero_y), pos2(cr.right(), zero_y)],
+                            Stroke::new(0.5, Color32::from_gray(30)),
+                        );
+
+                        // Draw curve
+                        if curve_data.len() >= 2 {
+                            let points: Vec<Pos2> = curve_data.iter().enumerate().map(|(i, &(_freq, db))| {
+                                let x = cr.left() + (i as f32 / (curve_data.len() - 1) as f32) * cr.width();
+                                let y = zero_y - (db / 18.0) * (cr.height() * 0.45); // ±18dB range
+                                pos2(x, y.clamp(cr.top(), cr.bottom()))
+                            }).collect();
+
+                            for pair in points.windows(2) {
+                                let color = if pair[0].y < zero_y { green() } else { red() };
+                                curve_painter.line_segment([pair[0], pair[1]], Stroke::new(1.5, color));
+                            }
+                        }
+
+                        // Frequency labels
+                        for &(freq, label) in &[(100.0, "100"), (1000.0, "1k"), (10000.0, "10k")] {
+                            let t = (freq as f64).log10() / (20000.0f64).log10();
+                            let x = cr.left() + t as f32 * cr.width();
+                            curve_painter.text(pos2(x, cr.bottom() - 6.0), Align2::CENTER_BOTTOM,
+                                label, FontId::monospace(6.0), Color32::from_gray(40));
+                        }
                     });
 
                     ui.separator();
