@@ -206,8 +206,9 @@ pub struct BeatForge {
     step_input: bool,
     step_cursor: usize,
 
-    // Detected BPM of loaded samples
+    // Detected BPM and sample info
     detected_bpm: Option<f32>,
+    sample_info: Option<String>, // duration, sample rate, etc.
 
     // Live recording (record pad hits to grid while playing)
     live_rec: bool,
@@ -420,6 +421,7 @@ impl BeatForge {
             step_input: false,
             step_cursor: 0,
             detected_bpm: None,
+            sample_info: None,
             live_rec: false,
             overdub: true,
             count_in: false,
@@ -503,8 +505,10 @@ impl BeatForge {
             let peaks = audio::compute_peaks(&data, 200);
             self.pad_peaks[pad] = Some(peaks);
 
-            // BPM detection
+            // BPM detection + sample info
             self.detected_bpm = slicer::detect_bpm(&data, sr);
+            let duration = data.len() as f32 / sr as f32;
+            self.sample_info = Some(format!("{:.2}s · {}Hz · {} samples", duration, sr, data.len()));
 
             let name = path.file_stem()
                 .and_then(|s| s.to_str())
@@ -1236,7 +1240,14 @@ impl eframe::App for BeatForge {
                         let y = origin.y + row as f32 * (pad_size + gap);
                         let rect = Rect::from_min_size(pos2(x, y), vec2(pad_size, pad_size));
                         if rect.contains(pos) {
-                            self.trigger_pad(pad_idx, ctx);
+                            let alt = ctx.input(|i| i.modifiers.alt);
+                            if alt {
+                                // Alt+click: preview only (don't change selection)
+                                self.engine.send(Cmd::TriggerPad(pad_idx, 1.0));
+                                self.flash_pad = Some((pad_idx, ctx.input(|i| i.time)));
+                            } else {
+                                self.trigger_pad(pad_idx, ctx);
+                            }
                             // Set note repeat hold
                             if self.note_repeat_rate > 0 {
                                 self.note_repeat_held_pad = Some(pad_idx);
@@ -2110,6 +2121,38 @@ impl BeatForge {
                         self.context_menu_row = None;
                     }
                     ui.separator();
+                    // Clone pad settings to another pad
+                    ui.label(RichText::new("CLONE TO:").size(8.0).color(muted_color()));
+                    ui.horizontal(|ui| {
+                        for target in 0..NUM_PADS {
+                            if target == pad_idx { continue; }
+                            if self.pad_types[target] == PadType::Empty || target >= 10 {
+                                if ui.add(Button::new(RichText::new(format!("{}", target + 1)).size(8.0).color(dim()))
+                                    .min_size(vec2(18.0, 14.0))).clicked() {
+                                    // Clone mixer settings
+                                    self.volumes[target] = self.volumes[pad_idx];
+                                    self.pans[target] = self.pans[pad_idx];
+                                    self.pitches[target] = self.pitches[pad_idx];
+                                    self.filters[target] = self.filters[pad_idx];
+                                    self.reversed[target] = self.reversed[pad_idx];
+                                    self.fx_params[target] = self.fx_params[pad_idx];
+                                    self.pad_names[target] = format!("{} (clone)", self.pad_names[pad_idx]);
+                                    // Clone pattern
+                                    for b in 0..self.banks.len() {
+                                        self.banks[b][target] = self.banks[b][pad_idx].clone();
+                                    }
+                                    // Sync
+                                    self.engine.send(Cmd::SetPadVol(target, self.volumes[target]));
+                                    self.engine.send(Cmd::SetPadPan(target, self.pans[target]));
+                                    self.engine.send(Cmd::SetPadPitch(target, self.pitches[target]));
+                                    self.engine.send(Cmd::SetPadFilter(target, self.filters[target]));
+                                    self.sync_pattern();
+                                    self.context_menu_row = None;
+                                }
+                            }
+                        }
+                    });
+                    ui.separator();
                     if ui.button("Close").clicked() {
                         self.context_menu_row = None;
                     }
@@ -2532,9 +2575,15 @@ impl BeatForge {
                         }
 
                         if resp.clicked() {
-                            // Cycle: empty → A → B → ... → H → empty
+                            // Left click: cycle bank assignment
                             let new_val = if is_empty { 0 } else if bank_idx < 7 { bank_idx + 1 } else { 255 };
                             self.arrangement[bar_idx][track_idx] = new_val;
+                        }
+                        if resp.double_clicked() && !is_empty {
+                            // Double-click: jump to this bank for editing
+                            self.active_bank = bank_idx as usize;
+                            self.sync_pattern();
+                            self.main_view = MainView::Sequencer;
                         }
                     }
                 });
@@ -2704,6 +2753,10 @@ impl BeatForge {
                                 self.engine.send(Cmd::SetPadVol(sp, self.volumes[sp]));
                             }
                         }
+                    }
+                    // Sample info
+                    if let Some(ref info) = self.sample_info {
+                        ui.label(RichText::new(info).size(8.0).color(muted_color()).family(FontFamily::Monospace));
                     }
                     // BPM detection result + match button
                     if let Some(detected) = self.detected_bpm {
