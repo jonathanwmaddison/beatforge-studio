@@ -1,0 +1,7 @@
+target/
+node_modules/
+dist/
+web-src/
+*.rlib
+.claude/
+package-lock.json
