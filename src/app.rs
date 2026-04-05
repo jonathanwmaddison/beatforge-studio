@@ -679,6 +679,21 @@ impl eframe::App for BeatForge {
                 }
             }
             // T for tap tempo
+            // M = mute selected pad, S = solo (only when not in piano mode)
+            if !piano_mode {
+                if input.key_pressed(Key::M) && !input.modifiers.command {
+                    let sp = self.selected_pad;
+                    self.muted[sp] = !self.muted[sp];
+                    self.engine.send(Cmd::SetPadMute(sp, self.muted[sp]));
+                }
+                // S is already mapped to pad 5, so use Ctrl+S... actually let's not conflict
+                // Use F9 for solo toggle instead
+                if input.key_pressed(Key::F9) {
+                    let sp = self.selected_pad;
+                    self.soloed[sp] = !self.soloed[sp];
+                    self.engine.send(Cmd::SetPadSolo(sp, self.soloed[sp]));
+                }
+            }
             if input.key_pressed(Key::T) {
                 self.tap_tempo(input.time);
             }
@@ -2144,8 +2159,9 @@ impl BeatForge {
                         }
                     }
 
-                    // Left-click OR drag on grid cells (paint mode)
-                    if (response.clicked() || response.dragged()) && pos.x >= grid_left {
+                    // Left-click OR left-drag on grid cells (paint mode)
+                    let left_button = ui.input(|i| i.pointer.primary_down());
+                    if (response.clicked() || (response.dragged() && left_button)) && pos.x >= grid_left {
                         let step = ((pos.x - grid_left) / cell_w) as usize;
                         let row = ((pos.y - rect.top() - header_h) / row_h) as usize;
                         if step < num_steps && row < pads.len() {
@@ -4247,6 +4263,7 @@ impl BeatForge {
             reverb_sends: self.reverb_sends.clone(),
             delay_sends: self.delay_sends.clone(),
             stereo_width: self.stereo_width,
+            enhancer_amount: self.enhancer_amount,
             sidechain_active: self.sidechain_active.clone(),
             fx_params: self.fx_params.clone(),
         }
@@ -4276,6 +4293,7 @@ impl BeatForge {
         self.reverb_sends = proj.reverb_sends;
         self.delay_sends = proj.delay_sends;
         self.stereo_width = proj.stereo_width;
+        self.enhancer_amount = proj.enhancer_amount;
         self.sidechain_active = proj.sidechain_active;
         self.fx_params = proj.fx_params;
 
@@ -4312,6 +4330,7 @@ impl BeatForge {
             }
         }
         self.engine.send(Cmd::SetStereoWidth(self.stereo_width));
+        self.engine.send(Cmd::SetEnhancer(self.enhancer_amount));
     }
 }
 

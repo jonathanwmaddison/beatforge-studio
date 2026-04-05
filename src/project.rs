@@ -32,6 +32,7 @@ pub struct ProjectData {
     pub reverb_sends: Vec<f32>,
     pub delay_sends: Vec<f32>,
     pub stereo_width: f32,
+    pub enhancer_amount: f32,
     pub sidechain_active: Vec<bool>,
     pub fx_params: Vec<[f32; 12]>,
 }
@@ -64,6 +65,7 @@ impl ProjectData {
             reverb_sends: Vec::new(),
             delay_sends: Vec::new(),
             stereo_width: 1.0,
+            enhancer_amount: 0.0,
             sidechain_active: Vec::new(),
             fx_params: Vec::new(),
         }
@@ -124,6 +126,7 @@ impl ProjectData {
         // Global extras
         out.push_str("[global]\n");
         out.push_str(&format!("stereo_width={}\n", self.stereo_width));
+        out.push_str(&format!("enhancer={}\n", self.enhancer_amount));
         out.push_str("\n");
 
         fs::write(path, out).map_err(|e| format!("Save failed: {e}"))
@@ -195,6 +198,7 @@ impl ProjectData {
                         "reverb_mix" => project.reverb_mix = val.parse().unwrap_or(0.0),
                         "delay_mix" => project.delay_mix = val.parse().unwrap_or(0.0),
                         "stereo_width" => project.stereo_width = val.parse().unwrap_or(1.0),
+                        "enhancer" => project.enhancer_amount = val.parse().unwrap_or(0.0),
                         _ => {}
                     }
                 } else if let Some(bi) = current_bank {
