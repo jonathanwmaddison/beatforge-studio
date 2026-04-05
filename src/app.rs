@@ -195,6 +195,11 @@ pub struct BeatForge {
     reverb_mix: f32,
     delay_mix: f32,
 
+    // Per-pad drum voice tuning
+    drum_tune: Vec<f32>,
+    drum_decay: Vec<f32>,
+    drum_color: Vec<f32>,
+
     // Per-pad attack/release/loop
     pad_attack: Vec<f32>,
     pad_release: Vec<f32>,
@@ -433,6 +438,9 @@ impl BeatForge {
             step_cursor: 0,
             detected_bpm: None,
             sample_info: None,
+            drum_tune: vec![0.0; NUM_PADS],
+            drum_decay: vec![1.0; NUM_PADS],
+            drum_color: vec![0.3; NUM_PADS],
             pad_attack: vec![0.001; NUM_PADS],
             pad_release: vec![0.01; NUM_PADS],
             pad_loop: vec![false; NUM_PADS],
@@ -1393,6 +1401,35 @@ impl eframe::App for BeatForge {
                         self.pad_names[sp] = info[sp].name.to_string();
                         self.pad_types[sp] = if info[sp].has_voice { PadType::Synth } else { PadType::Empty };
                         self.pad_peaks[sp] = None;
+                    }
+                });
+            }
+
+            // Drum voice tuning (only for synth pads 0-9)
+            if self.pad_types[sp] == PadType::Synth && sp < 10 {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("TUNE").size(8.0).color(muted_color()).family(FontFamily::Monospace));
+                    let before = self.drum_tune[sp];
+                    ui.add(Slider::new(&mut self.drum_tune[sp], -24.0..=24.0).step_by(1.0).show_value(false));
+                    ui.label(RichText::new(format!("{:+.0}st", self.drum_tune[sp])).size(9.0).color(dim()).family(FontFamily::Monospace));
+                    if self.drum_tune[sp] != before {
+                        self.engine.send(Cmd::SetDrumParams(sp, self.drum_tune[sp], self.drum_decay[sp], self.drum_color[sp]));
+                    }
+                });
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("DEC").size(8.0).color(muted_color()).family(FontFamily::Monospace));
+                    let before = self.drum_decay[sp];
+                    ui.add(Slider::new(&mut self.drum_decay[sp], 0.1..=3.0).show_value(false));
+                    if self.drum_decay[sp] != before {
+                        self.engine.send(Cmd::SetDrumParams(sp, self.drum_tune[sp], self.drum_decay[sp], self.drum_color[sp]));
+                    }
+                });
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("CLR").size(8.0).color(muted_color()).family(FontFamily::Monospace));
+                    let before = self.drum_color[sp];
+                    ui.add(Slider::new(&mut self.drum_color[sp], 0.0..=1.0).show_value(false));
+                    if self.drum_color[sp] != before {
+                        self.engine.send(Cmd::SetDrumParams(sp, self.drum_tune[sp], self.drum_decay[sp], self.drum_color[sp]));
                     }
                 });
             }

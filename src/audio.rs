@@ -103,6 +103,7 @@ pub enum Cmd {
     SetPadAttack(usize, f32),
     SetPadRelease(usize, f32),
     SetPadLoopMode(usize, bool),
+    SetDrumParams(usize, f32, f32, f32), // pad, tune, decay, color
     // Loop region
     SetLoopRegion(Option<usize>, Option<usize>),
     // Song mode
@@ -872,6 +873,17 @@ impl AudioState {
             Cmd::SetPadAttack(i, v) => { if i < NUM_PADS { self.pads[i].amp_attack = v; } }
             Cmd::SetPadRelease(i, v) => { if i < NUM_PADS { self.pads[i].amp_release = v; } }
             Cmd::SetPadLoopMode(i, m) => { if i < NUM_PADS { self.pads[i].loop_mode = m; } }
+            Cmd::SetDrumParams(i, tune, decay, color) => {
+                if i < NUM_PADS {
+                    self.pads[i].drum_tune = tune;
+                    self.pads[i].drum_decay = decay;
+                    self.pads[i].drum_color = color;
+                    // Apply to the voice if it's a kick
+                    if let Voice::Kick(ref mut k) = self.pads[i].voice {
+                        k.set_params(tune, decay, color);
+                    }
+                }
+            }
             Cmd::SetLoopRegion(start, end) => {
                 self.seq.loop_start = start;
                 self.seq.loop_end = end;
@@ -1030,8 +1042,12 @@ struct Pad {
     reverb_send: f32,
     delay_send: f32,
     // Per-pad sample envelope
-    amp_attack: f32,   // seconds (0 = instant)
-    amp_release: f32,  // seconds (0 = instant)
+    amp_attack: f32,
+    amp_release: f32,
+    // Drum voice tuning (for synth pads only)
+    drum_tune: f32,    // semitones offset (-24 to +24)
+    drum_decay: f32,   // decay time multiplier (0.1 to 3.0, 1.0 = default)
+    drum_color: f32,   // tonal color / noise blend (0 = tonal, 1 = noisy)
     amp_env_value: f64, // current envelope level
     amp_env_stage: u8,  // 0=idle, 1=attack, 2=sustain, 3=release
     // Sample loop mode
@@ -1061,6 +1077,9 @@ impl Pad {
             delay_send: 0.0,
             amp_attack: 0.001,
             amp_release: 0.01,
+            drum_tune: 0.0,
+            drum_decay: 1.0,
+            drum_color: 0.5,
             amp_env_value: 0.0,
             amp_env_stage: 0,
             loop_mode: false,
@@ -1261,8 +1280,16 @@ struct KickOsc {
     phase: f64,
     env: f64,
     pitch_env: f64,
+    click_env: f64,
     amp_decay: f64,
     pitch_decay: f64,
+    sr: f64,
+    // Tunable parameters (set from pad)
+    base_freq: f64,     // base frequency (default 42Hz)
+    pitch_depth: f64,   // pitch envelope amount (default 130Hz)
+    decay_mult: f64,    // decay time multiplier
+    click_amount: f64,  // transient click (0-1)
+    noise_state: u32,
 }
 
 impl KickOsc {
@@ -1271,29 +1298,56 @@ impl KickOsc {
             phase: 0.0,
             env: 0.0,
             pitch_env: 0.0,
+            click_env: 0.0,
             amp_decay: (-1.0 / (sr * 0.3)).exp(),
             pitch_decay: (-1.0 / (sr * 0.04)).exp(),
+            sr,
+            base_freq: 42.0,
+            pitch_depth: 130.0,
+            decay_mult: 1.0,
+            click_amount: 0.3,
+            noise_state: 99999,
         }
+    }
+
+    fn set_params(&mut self, tune_semi: f32, decay_mult: f32, color: f32) {
+        let ratio = 2.0f64.powf(tune_semi as f64 / 12.0);
+        self.base_freq = 42.0 * ratio;
+        self.pitch_depth = 130.0 * ratio;
+        self.decay_mult = decay_mult as f64;
+        self.amp_decay = (-1.0 / (self.sr * 0.3 * self.decay_mult)).exp();
+        self.click_amount = color as f64; // color controls click amount
     }
 
     fn trigger(&mut self, vel: f32) {
         self.phase = 0.0;
         self.env = vel as f64;
         self.pitch_env = 1.0;
+        self.click_env = vel as f64;
     }
 
     fn tick(&mut self, sr: f64) -> f32 {
-        if self.env < 0.001 {
+        if self.env < 0.001 && self.click_env < 0.001 {
             return 0.0;
         }
-        let freq = 42.0 + 130.0 * self.pitch_env;
+        let freq = self.base_freq + self.pitch_depth * self.pitch_env;
         self.phase += freq / sr;
         let out = (self.phase * TWO_PI).sin() * self.env;
         self.pitch_env *= self.pitch_decay;
         self.env *= self.amp_decay;
         // Sub harmonics for body
         let sub = (self.phase * 0.5 * TWO_PI).sin() * self.env * 0.3;
-        (out + sub) as f32
+        // Transient click (noise burst)
+        let click = if self.click_env > 0.001 {
+            self.noise_state ^= self.noise_state << 13;
+            self.noise_state ^= self.noise_state >> 17;
+            self.noise_state ^= self.noise_state << 5;
+            let noise = (self.noise_state as f64 / u32::MAX as f64) * 2.0 - 1.0;
+            let c = noise * self.click_env * self.click_amount;
+            self.click_env *= (-1.0 / (sr * 0.003)).exp(); // 3ms click
+            c
+        } else { 0.0 };
+        (out + sub + click) as f32
     }
 }
 
