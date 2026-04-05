@@ -1615,10 +1615,17 @@ impl eframe::App for BeatForge {
                         ui.label(k("Space")); ui.label("Play / Stop"); ui.end_row();
                         ui.label(k("Esc")); ui.label("Stop & reset"); ui.end_row();
                         ui.label(k("↑ / ↓")); ui.label("BPM ±1 (Shift: ±10)"); ui.end_row();
+                        ui.label(k("← / →")); ui.label("Select pad"); ui.end_row();
                         ui.label(k("Tab")); ui.label("Cycle views"); ui.end_row();
                         ui.label(k("T")); ui.label("Tap tempo"); ui.end_row();
+                        ui.label(k("M")); ui.label("Mute selected pad"); ui.end_row();
+                        ui.label(k("F1-F8")); ui.label("Switch pattern bank"); ui.end_row();
+                        ui.label(k("F9")); ui.label("Solo selected pad"); ui.end_row();
+                        ui.label(k("⌘S")); ui.label("Quick save"); ui.end_row();
+                        ui.label(k("⌘N")); ui.label("New project"); ui.end_row();
                         ui.label(k("⌘Z / ⌘⇧Z")); ui.label("Undo / Redo"); ui.end_row();
                         ui.label(k("⌘C / ⌘V")); ui.label("Copy / Paste pattern"); ui.end_row();
+                        ui.label(k("⌘D")); ui.label("Duplicate pattern to next bank"); ui.end_row();
                         ui.label(k("/")); ui.label("This help"); ui.end_row();
                     });
                     ui.add_space(6.0);
@@ -1636,6 +1643,7 @@ impl eframe::App for BeatForge {
                         let k = |t: &str| RichText::new(t).family(FontFamily::Monospace).strong().size(10.0);
                         ui.label(k("Z..M")); ui.label("C3 to B3 (chromatic)"); ui.end_row();
                         ui.label(k("Q..E")); ui.label("C4 to E4"); ui.end_row();
+                        ui.label(k("[ / ]")); ui.label("Octave down / up"); ui.end_row();
                     });
                     ui.add_space(6.0);
                     ui.label(RichText::new("Click cell to toggle · Shift+Click for velocity\nDrag & drop audio files onto pads · Right-click to delete\nProbability lane: draw per-step trigger chance").size(10.0).color(dim()));
@@ -4098,6 +4106,7 @@ impl BeatForge {
         self.reverb_mix = 0.0;
         self.delay_mix = 0.0;
         self.stereo_width = 1.0;
+        self.enhancer_amount = 0.0;
 
         let info = audio::default_pad_info();
         self.banks = (0..8).map(|_| vec![vec![0u8; MAX_STEPS]; NUM_PADS]).collect();
