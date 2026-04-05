@@ -331,8 +331,13 @@ pub struct BeatForge {
     midi_connected: std::sync::Arc<std::sync::atomic::AtomicBool>,
     midi_device_name: String,
 
+    // Sample browser
+    browser_path: std::path::PathBuf,
+    browser_files: Vec<(String, std::path::PathBuf, bool)>, // (name, path, is_dir)
+    browser_open: bool,
+
     // Channel settings popup
-    show_channel_settings: Option<usize>, // Some(pad_idx) when open
+    show_channel_settings: Option<usize>,
 
     // Project state
     project_name: String,
@@ -410,6 +415,9 @@ impl BeatForge {
             enhancer_amount: 0.0,
             velocity_curve: 0, // 0=linear, 1=exp, 2=log
             delay_division: 1,
+            browser_path: dirs_home().join("Desktop"),
+            browser_files: Vec::new(),
+            browser_open: false,
             show_channel_settings: None,
             project_name: "Untitled".to_string(),
             project_dirty: false,
@@ -485,6 +493,28 @@ impl BeatForge {
         // Load a default beat so the app isn't empty on first launch
         app.load_default_beat();
         app
+    }
+
+    fn scan_browser(&mut self) {
+        self.browser_files.clear();
+        if let Ok(entries) = std::fs::read_dir(&self.browser_path) {
+            let mut dirs = Vec::new();
+            let mut files = Vec::new();
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.starts_with('.') { continue; } // skip hidden
+                if path.is_dir() {
+                    dirs.push((name, path, true));
+                } else if is_audio_file(&path) {
+                    files.push((name, path, false));
+                }
+            }
+            dirs.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
+            files.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
+            self.browser_files.extend(dirs);
+            self.browser_files.extend(files);
+        }
     }
 
     fn load_default_beat(&mut self) {
@@ -1563,6 +1593,70 @@ impl eframe::App for BeatForge {
                     .size(10.0).color(Color32::from_rgb(168, 85, 247)).family(FontFamily::Monospace));
                 if self.enhancer_amount != before { self.engine.send(Cmd::SetEnhancer(self.enhancer_amount)); }
             });
+
+            ui.add_space(4.0);
+            ui.separator();
+
+            // ── Sample Browser ──────────────────────────
+            let browser_label = if self.browser_open { "▼ BROWSER" } else { "▶ BROWSER" };
+            if ui.add(Button::new(RichText::new(browser_label).size(9.0).color(dim()).family(FontFamily::Monospace)).frame(false)).clicked() {
+                self.browser_open = !self.browser_open;
+                if self.browser_open && self.browser_files.is_empty() {
+                    self.scan_browser();
+                }
+            }
+
+            if self.browser_open {
+                // Current path
+                let path_str = self.browser_path.file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("/")
+                    .to_string();
+                ui.horizontal(|ui| {
+                    if ui.button(RichText::new("↑").size(10.0).color(dim())).clicked() {
+                        if let Some(parent) = self.browser_path.parent() {
+                            self.browser_path = parent.to_path_buf();
+                            self.scan_browser();
+                        }
+                    }
+                    ui.label(RichText::new(&path_str).size(8.0).color(dim()).family(FontFamily::Monospace));
+                    if ui.button(RichText::new("⟳").size(10.0).color(dim())).clicked() {
+                        self.scan_browser();
+                    }
+                });
+
+                // File list
+                ScrollArea::vertical().max_height(150.0).show(ui, |ui| {
+                    let files = self.browser_files.clone();
+                    for (name, path, is_dir) in &files {
+                        let icon = if *is_dir { "📁 " } else { "♪ " };
+                        let color = if *is_dir { dim() } else { Color32::from_rgb(34, 197, 94) };
+                        let resp = ui.add(Button::new(
+                            RichText::new(format!("{icon}{name}")).size(9.0).color(color).family(FontFamily::Monospace)
+                        ).frame(false));
+
+                        if *is_dir && resp.clicked() {
+                            self.browser_path = path.clone();
+                            self.scan_browser();
+                        } else if !is_dir {
+                            if resp.clicked() {
+                                // Single click: preview (trigger on selected pad temporarily)
+                                let sp = self.selected_pad;
+                                self.load_sample_file(sp, path);
+                                self.engine.send(Cmd::TriggerPad(sp, 1.0));
+                            }
+                            if resp.double_clicked() {
+                                // Double-click: load permanently
+                                let sp = self.selected_pad;
+                                self.load_sample_file(sp, path);
+                            }
+                        }
+                    }
+                    if files.is_empty() {
+                        ui.label(RichText::new("No audio files").size(9.0).color(muted_color()));
+                    }
+                });
+            }
         });
 
         // ══════════════════════════════════════════════════
@@ -4483,6 +4577,20 @@ fn apply_velocity_curve(vel: f32, curve: usize) -> f32 {
         2 => vel.sqrt(),                   // Logarithmic: harder response
         _ => vel,                          // Linear
     }
+}
+
+fn dirs_home() -> std::path::PathBuf {
+    std::env::var_os("HOME").map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+}
+
+const AUDIO_EXTS: &[&str] = &["wav", "wave", "mp3", "flac", "ogg", "aac", "m4a", "aif", "aiff"];
+
+fn is_audio_file(path: &std::path::Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .map(|e| AUDIO_EXTS.contains(&e.to_lowercase().as_str()))
+        .unwrap_or(false)
 }
 
 fn simple_rng() -> u32 {
