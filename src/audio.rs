@@ -90,6 +90,8 @@ pub enum Cmd {
     SetPadDelaySend(usize, f32),
     // Master stereo width
     SetStereoWidth(f32),
+    // Master enhancer (Soundgoodizer-style one-knob)
+    SetEnhancer(f32), // 0-1 amount
     // All notes off (kill stuck synth voices)
     AllNotesOff,
     // Per-channel insert FX
@@ -241,7 +243,14 @@ struct AudioState {
     filter_r: Biquad,
     reverb_mix: f32,
     delay_mix: f32,
-    stereo_width: f32, // 0 = mono, 1 = normal, 2 = wide
+    stereo_width: f32,
+    enhancer_amount: f32,
+    // Enhancer state (3-band: low, mid, high)
+    enhancer_low_env: f32,
+    enhancer_mid_env: f32,
+    enhancer_high_env: f32,
+    enhancer_lp: Biquad,
+    enhancer_hp: Biquad,
     recorder: AudioRecorder,
     shared: Arc<SharedState>,
     // Sidechain: [target_pad] = (source_pad, amount, envelope)
@@ -280,6 +289,12 @@ impl AudioState {
             reverb_mix: 0.0,
             delay_mix: 0.0,
             stereo_width: 1.0,
+            enhancer_amount: 0.0,
+            enhancer_low_env: 0.0,
+            enhancer_mid_env: 0.0,
+            enhancer_high_env: 0.0,
+            enhancer_lp: Biquad::lowpass(200.0, sr),
+            enhancer_hp: Biquad::lowpass(4000.0, sr),
             recorder: AudioRecorder::new(sr as u32, 300.0), // 5 min max
             shared,
             sidechain: (0..NUM_PADS).map(|_| None).collect(),
@@ -512,9 +527,54 @@ impl AudioState {
             left = self.filter_l.tick(left);
             right = self.filter_r.tick(right);
 
-            // Tape saturation (subtle warmth — adds even harmonics)
+            // Tape saturation (subtle warmth)
             left = tape_saturate(left);
             right = tape_saturate(right);
+
+            // Master enhancer (Soundgoodizer-style multiband saturation + compression)
+            if self.enhancer_amount > 0.01 {
+                let amt = self.enhancer_amount;
+                let mono = (left + right) * 0.5;
+
+                // Split into 3 bands (approximate with single-pole filters)
+                let low = self.enhancer_lp.tick(mono);
+                let high_input = self.enhancer_hp.tick(mono);
+                let mid = mono - low - high_input;
+
+                // Per-band envelope following (for compression)
+                let att = 0.01f32;
+                let rel = 0.995f32;
+                self.enhancer_low_env = if low.abs() > self.enhancer_low_env {
+                    low.abs() * att + self.enhancer_low_env * (1.0 - att)
+                } else { self.enhancer_low_env * rel };
+                self.enhancer_mid_env = if mid.abs() > self.enhancer_mid_env {
+                    mid.abs() * att + self.enhancer_mid_env * (1.0 - att)
+                } else { self.enhancer_mid_env * rel };
+                self.enhancer_high_env = if high_input.abs() > self.enhancer_high_env {
+                    high_input.abs() * att + self.enhancer_high_env * (1.0 - att)
+                } else { self.enhancer_high_env * rel };
+
+                // Compress + saturate each band
+                let compress = |signal: f32, env: f32| -> f32 {
+                    if env > 0.01 { signal / (1.0 + env * amt * 2.0) } else { signal }
+                };
+                let saturate = |x: f32| -> f32 { (x * (1.0 + amt * 3.0)).tanh() };
+
+                let low_proc = saturate(compress(low, self.enhancer_low_env)) * (1.0 + amt * 0.3);
+                let mid_proc = saturate(compress(mid, self.enhancer_mid_env));
+                let high_proc = saturate(compress(high_input, self.enhancer_high_env)) * (1.0 + amt * 0.5);
+
+                // Recombine
+                let enhanced = low_proc + mid_proc + high_proc;
+                let blend = amt;
+                left = left * (1.0 - blend) + enhanced * blend;
+                right = right * (1.0 - blend) + enhanced * blend;
+
+                // Subtle stereo widening on highs
+                let side = (left - right) * 0.5;
+                left += side * amt * 0.2;
+                right -= side * amt * 0.2;
+            }
 
             // Soft clip (final limiter)
             frame[0] = soft_clip(left);
@@ -763,6 +823,9 @@ impl AudioState {
             }
             Cmd::SetStereoWidth(w) => {
                 self.stereo_width = w;
+            }
+            Cmd::SetEnhancer(amt) => {
+                self.enhancer_amount = amt;
             }
             Cmd::AllNotesOff => {
                 for synth in &mut self.synths {

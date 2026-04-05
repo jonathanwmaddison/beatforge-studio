@@ -261,8 +261,9 @@ pub struct BeatForge {
     //                                     phaser_rate, phaser_depth, phaser_fb, phaser_mix)
     fx_params: Vec<[f32; 12]>,
 
-    // Master stereo width
+    // Master stereo width + enhancer
     stereo_width: f32,
+    enhancer_amount: f32,
 
     // Velocity curve: 0=linear, 1=exponential (softer feel), 2=logarithmic (harder feel)
     velocity_curve: usize,
@@ -395,6 +396,7 @@ impl BeatForge {
             // [drive, dist_mix, bits, crush_rate, crush_mix, chorus_rate, chorus_depth, chorus_mix, ph_rate, ph_depth, ph_fb, ph_mix]
             fx_params: vec![[0.0, 0.0, 16.0, 1.0, 0.0, 0.5, 3.0, 0.0, 0.3, 0.5, 0.5, 0.0]; NUM_PADS],
             stereo_width: 1.0,
+            enhancer_amount: 0.0,
             velocity_curve: 0, // 0=linear, 1=exp, 2=log
             delay_division: 1,
             show_channel_settings: None,
@@ -1471,6 +1473,16 @@ impl eframe::App for BeatForge {
                     else { format!("{:.0}%", self.stereo_width * 100.0) };
                 ui.label(RichText::new(width_text).size(10.0).color(dim()).family(FontFamily::Monospace));
                 if self.stereo_width != before { self.engine.send(Cmd::SetStereoWidth(self.stereo_width)); }
+            });
+
+            // Master enhancer (Soundgoodizer-style one-knob mastering)
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("ENH").size(9.0).color(Color32::from_rgb(168, 85, 247)).family(FontFamily::Monospace));
+                let before = self.enhancer_amount;
+                ui.add(Slider::new(&mut self.enhancer_amount, 0.0..=1.0).show_value(false));
+                ui.label(RichText::new(format!("{}", (self.enhancer_amount * 100.0) as u32))
+                    .size(10.0).color(Color32::from_rgb(168, 85, 247)).family(FontFamily::Monospace));
+                if self.enhancer_amount != before { self.engine.send(Cmd::SetEnhancer(self.enhancer_amount)); }
             });
         });
 
@@ -4023,6 +4035,20 @@ impl BeatForge {
 
     fn copy_pattern(&mut self) {
         self.pattern_clipboard = Some(self.banks[self.active_bank].clone());
+    }
+
+    fn merge_patterns(&mut self, source: usize) {
+        // Merge source bank ON TOP of current bank (max velocity wins)
+        if source >= self.banks.len() || source == self.active_bank { return; }
+        self.push_undo();
+        for pad in 0..NUM_PADS {
+            for step in 0..MAX_STEPS {
+                let src = self.banks[source][pad].get(step).copied().unwrap_or(0);
+                let dst = self.banks[self.active_bank][pad].get(step).copied().unwrap_or(0);
+                self.banks[self.active_bank][pad][step] = src.max(dst);
+            }
+        }
+        self.sync_pattern();
     }
 
     fn duplicate_pattern(&mut self) {
