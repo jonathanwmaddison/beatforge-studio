@@ -628,11 +628,13 @@ impl eframe::App for BeatForge {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let current_step = self.engine.current_step();
 
-        // Update window title
-        let dirty_mark = if self.project_dirty { " ●" } else { "" };
-        ctx.send_viewport_cmd(egui::ViewportCommand::Title(
-            format!("{}{dirty_mark} — BeatForge Studio", self.project_name)
-        ));
+        // Limit idle repaint rate to save CPU (only repaint at 30fps during playback)
+        if !self.playing && !self.exporting && self.note_repeat_held_pad.is_none() {
+            // When idle, only repaint every 100ms (10fps) — enough for UI responsiveness
+            ctx.request_repaint_after(std::time::Duration::from_millis(100));
+        }
+
+        // Window title is set on save/load/new — not every frame
 
         // Read triggered pads from audio thread (for pad flash effect)
         let seq_triggered = self.engine.shared.get_triggered();
@@ -929,12 +931,14 @@ impl eframe::App for BeatForge {
                     self.flash_pad = Some((pad, now));
                 }
             }
-            ctx.request_repaint(); // Keep updating for repeat timing
+            if self.note_repeat_held_pad.is_some() {
+                ctx.request_repaint(); // Only repaint when actively repeating
+            }
         }
 
-        // Request repaint while playing for step animation
-        if self.playing {
-            ctx.request_repaint();
+        // Request repaint while playing for step animation (30fps is enough)
+        if self.playing || self.exporting {
+            ctx.request_repaint_after(std::time::Duration::from_millis(33));
         }
 
         // ══════════════════════════════════════════════════
@@ -1868,7 +1872,6 @@ impl eframe::App for BeatForge {
                     self.show_export = false;
                 }
             }
-            ctx.request_repaint();
         }
 
         // Channel settings popup
@@ -4423,6 +4426,12 @@ impl BeatForge {
 
     fn mark_dirty(&mut self) {
         self.project_dirty = true;
+    }
+
+    fn update_title(&self, ctx: &egui::Context) {
+        let dirty_mark = if self.project_dirty { " \u{25cf}" } else { "" };
+        let title = format!("{}{dirty_mark} \u{2014} BeatForge Studio", self.project_name);
+        ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
     }
 
     fn push_undo(&mut self) {
