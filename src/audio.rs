@@ -97,8 +97,12 @@ pub enum Cmd {
     SetPadBitcrush { pad: usize, bits: f32, rate: f32, mix: f32 },
     SetPadChorus { pad: usize, rate: f32, depth: f32, mix: f32 },
     SetPadPhaser { pad: usize, rate: f32, depth: f32, feedback: f32, mix: f32 },
+    // Per-pad sample envelope and loop mode
+    SetPadAttack(usize, f32),
+    SetPadRelease(usize, f32),
+    SetPadLoopMode(usize, bool),
     // Loop region
-    SetLoopRegion(Option<usize>, Option<usize>), // start, end (None = no loop region)
+    SetLoopRegion(Option<usize>, Option<usize>),
     // Song mode
     SetSongMode(Vec<Vec<Vec<u8>>>),
     ClearSongMode,
@@ -802,6 +806,9 @@ impl AudioState {
                     self.pads[pad].fx.phaser.mix = mix;
                 }
             }
+            Cmd::SetPadAttack(i, v) => { if i < NUM_PADS { self.pads[i].amp_attack = v; } }
+            Cmd::SetPadRelease(i, v) => { if i < NUM_PADS { self.pads[i].amp_release = v; } }
+            Cmd::SetPadLoopMode(i, m) => { if i < NUM_PADS { self.pads[i].loop_mode = m; } }
             Cmd::SetLoopRegion(start, end) => {
                 self.seq.loop_start = start;
                 self.seq.loop_end = end;
@@ -957,8 +964,15 @@ struct Pad {
     trim_start: f32,
     trim_end: f32,
     choke_group: u8,
-    reverb_send: f32,  // 0-1 per-channel reverb send
-    delay_send: f32,   // 0-1 per-channel delay send
+    reverb_send: f32,
+    delay_send: f32,
+    // Per-pad sample envelope
+    amp_attack: f32,   // seconds (0 = instant)
+    amp_release: f32,  // seconds (0 = instant)
+    amp_env_value: f64, // current envelope level
+    amp_env_stage: u8,  // 0=idle, 1=attack, 2=sustain, 3=release
+    // Sample loop mode
+    loop_mode: bool,   // true = loop, false = one-shot
 }
 
 impl Pad {
@@ -982,10 +996,19 @@ impl Pad {
             choke_group: choke,
             reverb_send: 0.0,
             delay_send: 0.0,
+            amp_attack: 0.001,
+            amp_release: 0.01,
+            amp_env_value: 0.0,
+            amp_env_stage: 0,
+            loop_mode: false,
         }
     }
 
     fn trigger(&mut self, vel: f32) {
+        // Start amplitude envelope
+        self.amp_env_stage = 1; // attack
+        self.amp_env_value = 0.0;
+
         if let Some(ref mut s) = self.sample {
             let rate = 2.0f64.powf(self.pitch as f64 / 12.0);
             let len = s.data.len() as f64;
@@ -1007,11 +1030,35 @@ impl Pad {
 
     fn tick(&mut self, sr: f64) -> f32 {
         let raw = if let Some(ref mut s) = self.sample {
-            s.tick()
+            let out = s.tick();
+            // Handle loop mode
+            if !s.playing && self.loop_mode && self.amp_env_stage > 0 {
+                let len = s.data.len() as f64;
+                s.playing = true;
+                s.position = len * self.trim_start as f64;
+            }
+            out
         } else {
             self.voice.tick(sr)
         };
-        let filtered = self.filter.tick(raw * self.vol);
+        // Amplitude envelope
+        match self.amp_env_stage {
+            1 => { // Attack
+                let rate = if self.amp_attack > 0.001 { 1.0 / (self.amp_attack as f64 * sr) } else { 1.0 };
+                self.amp_env_value = (self.amp_env_value + rate).min(1.0);
+                if self.amp_env_value >= 1.0 { self.amp_env_stage = 2; }
+            }
+            2 => { /* Sustain — hold at 1.0 */ }
+            3 => { // Release
+                let rate = if self.amp_release > 0.001 { 1.0 / (self.amp_release as f64 * sr) } else { 1.0 };
+                self.amp_env_value = (self.amp_env_value - rate).max(0.0);
+                if self.amp_env_value <= 0.0 { self.amp_env_stage = 0; }
+            }
+            _ => {} // Idle
+        }
+        let env_gain = self.amp_env_value as f32;
+
+        let filtered = self.filter.tick(raw * self.vol * env_gain);
         let fxed = self.fx.process(filtered);
         self.eq.process(fxed)
     }

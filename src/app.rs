@@ -195,6 +195,11 @@ pub struct BeatForge {
     reverb_mix: f32,
     delay_mix: f32,
 
+    // Per-pad attack/release/loop
+    pad_attack: Vec<f32>,
+    pad_release: Vec<f32>,
+    pad_loop: Vec<bool>,
+
     // Audio recording (bounce)
     is_recording: bool,
     record_start_time: f64,
@@ -422,6 +427,9 @@ impl BeatForge {
             step_cursor: 0,
             detected_bpm: None,
             sample_info: None,
+            pad_attack: vec![0.001; NUM_PADS],
+            pad_release: vec![0.01; NUM_PADS],
+            pad_loop: vec![false; NUM_PADS],
             live_rec: false,
             overdub: true,
             count_in: false,
@@ -1646,6 +1654,13 @@ impl eframe::App for BeatForge {
                     ui.label(RichText::new("● LIVE REC").size(9.0).strong().color(red()).family(FontFamily::Monospace));
                     ui.label(RichText::new("·").size(9.0).color(muted_color()));
                 }
+                // Clip indicator
+                let master_level = self.engine.shared.get_master_level();
+                if master_level > 0.95 {
+                    ui.label(RichText::new("CLIP").size(9.0).strong().color(Color32::BLACK)
+                        .background_color(red()));
+                    ui.label(RichText::new("·").size(9.0).color(muted_color()));
+                }
                 // MIDI indicator
                 if self.midi_connected.load(Ordering::Relaxed) {
                     ui.label(RichText::new("MIDI ●").size(8.0).color(green()).family(FontFamily::Monospace));
@@ -2726,14 +2741,34 @@ impl BeatForge {
                 ui.horizontal(|ui| {
                     if self.pad_types[sp] == PadType::Sample {
                         let rev_fill = if self.reversed[sp] { accent() } else { Color32::from_gray(28) };
-                        if ui.add(Button::new(RichText::new("REVERSE").size(9.0)
+                        if ui.add(Button::new(RichText::new("REV").size(8.0)
                             .color(if self.reversed[sp] { Color32::BLACK } else { dim() }))
-                            .fill(rev_fill)).clicked()
-                        {
+                            .fill(rev_fill)).clicked() {
                             self.reversed[sp] = !self.reversed[sp];
                             self.engine.send(Cmd::SetPadReverse(sp, self.reversed[sp]));
                         }
+                        // Loop mode toggle
+                        let loop_fill = if self.pad_loop[sp] { Color32::from_rgb(6, 182, 212) } else { Color32::from_gray(28) };
+                        if ui.add(Button::new(RichText::new("LOOP").size(8.0)
+                            .color(if self.pad_loop[sp] { Color32::BLACK } else { dim() }))
+                            .fill(loop_fill)).clicked() {
+                            self.pad_loop[sp] = !self.pad_loop[sp];
+                            self.engine.send(Cmd::SetPadLoopMode(sp, self.pad_loop[sp]));
+                        }
                     }
+                    // Attack / Release
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("ATK").size(8.0).color(muted_color()));
+                        let before = self.pad_attack[sp];
+                        ui.add(Slider::new(&mut self.pad_attack[sp], 0.0..=0.5).show_value(false).logarithmic(true));
+                        if self.pad_attack[sp] != before { self.engine.send(Cmd::SetPadAttack(sp, self.pad_attack[sp])); }
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("REL").size(8.0).color(muted_color()));
+                        let before = self.pad_release[sp];
+                        ui.add(Slider::new(&mut self.pad_release[sp], 0.0..=2.0).show_value(false).logarithmic(true));
+                        if self.pad_release[sp] != before { self.engine.send(Cmd::SetPadRelease(sp, self.pad_release[sp])); }
+                    });
                     if ui.button(RichText::new("LOAD").size(9.0).color(accent())).clicked() {
                         if let Some(path) = rfd::FileDialog::new()
                             .add_filter("Audio", &["wav", "wave", "mp3", "flac", "ogg", "aac", "m4a"])
