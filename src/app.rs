@@ -371,7 +371,7 @@ impl BeatForge {
         let midi_device_name = midi_mgr.device_name.clone();
         std::mem::forget(midi_mgr); // Keep the connection alive
 
-        BeatForge {
+        let mut app = BeatForge {
             engine,
             playing: false,
             bpm: 90.0,
@@ -470,7 +470,33 @@ impl BeatForge {
             bottom_view: BottomView::Editor,
             show_help: false,
             show_presets: false,
-        }
+        };
+
+        // Load a default beat so the app isn't empty on first launch
+        app.load_default_beat();
+        app
+    }
+
+    fn load_default_beat(&mut self) {
+        // Boom Bap pattern in Bank A
+        let bank = &mut self.banks[0];
+        // Kick
+        bank[0] = vec![3,0,0,0,0,0,0,0,3,0,0,0,0,0,0,0,
+                       0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                       0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+        // Snare
+        bank[1] = vec![0,0,0,0,3,0,0,0,0,0,0,0,3,0,0,0,
+                       0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                       0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+        // Hi-hat closed
+        bank[2] = vec![3,0,2,0,3,0,2,0,3,0,2,0,3,0,2,0,
+                       0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                       0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+        // Hi-hat open
+        bank[3] = vec![0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0,
+                       0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                       0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+        self.project_name = "Demo Beat".to_string();
     }
 
     fn trigger_pad(&mut self, idx: usize, ctx: &egui::Context) {
@@ -1875,30 +1901,34 @@ impl eframe::App for BeatForge {
                     ui.label(RichText::new("·").size(9.0).color(muted_color()));
                 }
                 ui.label(RichText::new(format!(
-                    "BEATFORGE · {} CH · {} STEPS · BANK {}",
+                    "BEATFORGE · {:.0} BPM · {} CH · {} STEPS · BANK {}",
+                    self.bpm,
                     self.active_pads().len(),
                     self.num_steps,
                     BANK_LABELS[self.active_bank],
                 )).size(9.0).color(muted_color()).family(FontFamily::Monospace));
 
-                // Mini spectrum analyzer
+                // Mini spectrum analyzer (gradient: green → amber → red)
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    let (_, painter) = ui.allocate_painter(vec2(200.0, 20.0), Sense::hover());
+                    let (_, painter) = ui.allocate_painter(vec2(220.0, 22.0), Sense::hover());
                     let rect = painter.clip_rect();
+                    painter.rect_filled(rect, 2.0, Color32::from_gray(8));
                     let bar_w = rect.width() / NUM_BINS as f32;
                     for i in 0..NUM_BINS {
                         let val = self.engine.spectrum.get_bin(i);
-                        let h = val * rect.height();
-                        let x = rect.left() + i as f32 * bar_w;
-                        let hue = (i as f32 / NUM_BINS as f32) * 0.3; // green to amber
-                        let color = Color32::from_rgb(
-                            (180.0 + 75.0 * hue) as u8,
-                            (200.0 - 120.0 * hue) as u8,
-                            30,
-                        );
+                        let h = val * (rect.height() - 2.0);
+                        let x = rect.left() + i as f32 * bar_w + 1.0;
+                        // Color based on level: green → amber → red
+                        let color = if val > 0.7 {
+                            Color32::from_rgb(239, 68, 68) // red
+                        } else if val > 0.4 {
+                            Color32::from_rgb(245, 158, 11) // amber
+                        } else {
+                            Color32::from_rgb(34, 197, 94) // green
+                        };
                         painter.rect_filled(
-                            Rect::from_min_size(pos2(x, rect.bottom() - h), vec2(bar_w - 0.5, h)),
-                            0.0, color_alpha(color, 180),
+                            Rect::from_min_size(pos2(x, rect.bottom() - h - 1.0), vec2((bar_w - 1.0).max(1.0), h)),
+                            1.0, color_alpha(color, 200),
                         );
                     }
                 });
