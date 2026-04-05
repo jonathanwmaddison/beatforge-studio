@@ -1,0 +1,4 @@
+# Workaround for Xcode license not accepted
+# Remove this if you've run: sudo xcodebuild -license accept
+[env]
+DEVELOPER_DIR = "/Library/Developer/CommandLineTools"
