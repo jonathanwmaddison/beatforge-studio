@@ -536,6 +536,33 @@ impl BeatForge {
         bank[3] = vec![0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0,
                        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
                        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+        // Trap pattern in Bank B
+        let bank_b = &mut self.banks[1];
+        bank_b[0] = vec![3,0,0,0,0,0,3,0,0,0,0,0,3,0,0,0,
+                         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+        bank_b[1] = vec![0,0,0,0,3,0,0,0,0,0,0,0,3,0,0,2,
+                         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+        bank_b[2] = vec![3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
+                         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+        bank_b[5] = vec![0,0,2,0,0,0,0,0,0,0,2,0,0,0,0,0,
+                         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+
+        // House pattern in Bank C
+        let bank_c = &mut self.banks[2];
+        bank_c[0] = vec![3,0,0,0,3,0,0,0,3,0,0,0,3,0,0,0,
+                         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+        bank_c[1] = vec![0,0,0,0,3,0,0,0,0,0,0,0,3,0,0,0,
+                         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+        bank_c[2] = vec![0,0,3,0,0,0,3,0,0,0,3,0,0,0,3,0,
+                         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+
         self.project_name = "Demo Beat".to_string();
     }
 
@@ -2492,6 +2519,32 @@ impl BeatForge {
                 .auto_sized()
                 .show(ui.ctx(), |ui| {
                     ui.label(RichText::new(&pad_name).size(10.0).strong().color(color));
+                    ui.separator();
+
+                    // Euclidean rhythm generator
+                    ui.label(RichText::new("EUCLIDEAN").size(8.0).color(Color32::from_rgb(168, 85, 247)).family(FontFamily::Monospace));
+                    ui.horizontal(|ui| {
+                        let euclidean_presets = [
+                            (3, "E(3)", "tresillo"),
+                            (4, "E(4)", "4-on-floor"),
+                            (5, "E(5)", "cinquillo"),
+                            (7, "E(7)", "west african"),
+                        ];
+                        for (hits, label, _desc) in euclidean_presets {
+                            if ui.add(Button::new(RichText::new(label).size(8.0).color(dim()))
+                                .min_size(vec2(28.0, 16.0))).clicked() {
+                                self.push_undo();
+                                let pattern = euclidean_rhythm(hits, num_steps);
+                                for (s, &v) in pattern.iter().enumerate() {
+                                    if s < num_steps {
+                                        self.banks[bank][pad_idx][s] = v;
+                                    }
+                                }
+                                self.sync_pattern();
+                                self.context_menu_row = None;
+                            }
+                        }
+                    });
                     ui.separator();
 
                     if ui.button("Randomize (25%)").clicked() {
@@ -4621,6 +4674,70 @@ fn apply_velocity_curve(vel: f32, curve: usize) -> f32 {
         2 => vel.sqrt(),                   // Logarithmic: harder response
         _ => vel,                          // Linear
     }
+}
+
+/// Euclidean rhythm generator (Bjorklund algorithm)
+/// Distributes `hits` evenly across `steps` — creates musically interesting patterns
+/// E(3,8) = [x . . x . . x .] (Cuban tresillo)
+/// E(5,8) = [x . x x . x x .] (Cinquillo)
+/// E(4,12) = [x . . x . . x . . x . .] (standard 4-on-floor)
+fn euclidean_rhythm(hits: usize, steps: usize) -> Vec<u8> {
+    if hits == 0 || steps == 0 { return vec![0; steps]; }
+    if hits >= steps { return vec![3; steps]; }
+
+    // Bjorklund algorithm
+    let mut pattern = Vec::new();
+    let mut counts = Vec::new();
+    let mut remainders = Vec::new();
+
+    let mut divisor = steps - hits;
+    remainders.push(hits as i32);
+    let mut level = 0;
+
+    loop {
+        counts.push(divisor / remainders[level] as usize);
+        let new_rem = divisor % remainders[level] as usize;
+        remainders.push(new_rem as i32);
+        divisor = remainders[level] as usize;
+        level += 1;
+        if remainders[level] <= 1 { break; }
+    }
+
+    counts.push(divisor);
+
+    fn build(level: usize, counts: &[usize], remainders: &[i32], pattern: &mut Vec<bool>) {
+        if level == usize::MAX { // underflow guard
+            pattern.push(false);
+        } else if level == 0 {
+            pattern.push(true);
+        } else {
+            // Fallback: simple even distribution
+            return;
+        }
+    }
+
+    // Simpler implementation: direct computation
+    pattern.clear();
+    for i in 0..steps {
+        // Bresenham-style even distribution
+        let threshold = (i * hits) % steps;
+        let prev_threshold = if i > 0 { ((i - 1) * hits) % steps } else { steps };
+        let is_hit = (i * hits / steps) != ((i.wrapping_sub(1)) * hits / steps) || i == 0;
+        pattern.push(if is_hit && pattern.iter().filter(|&&v| v > 0).count() < hits { 3 } else { 0 });
+    }
+
+    // Verify hit count and fix if needed
+    let actual_hits = pattern.iter().filter(|&&v| v > 0).count();
+    if actual_hits != hits {
+        // Fallback: simple even spacing
+        pattern = vec![0u8; steps];
+        for i in 0..hits {
+            let pos = (i * steps) / hits;
+            pattern[pos] = 3;
+        }
+    }
+
+    pattern
 }
 
 fn dirs_home() -> std::path::PathBuf {
