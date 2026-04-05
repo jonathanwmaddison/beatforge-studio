@@ -97,8 +97,10 @@ pub enum Cmd {
     SetPadBitcrush { pad: usize, bits: f32, rate: f32, mix: f32 },
     SetPadChorus { pad: usize, rate: f32, depth: f32, mix: f32 },
     SetPadPhaser { pad: usize, rate: f32, depth: f32, feedback: f32, mix: f32 },
-    // Song mode: provide ordered list of bank patterns to play through
-    SetSongMode(Vec<Vec<Vec<u8>>>), // vec of patterns (each pattern = [pad][step])
+    // Loop region
+    SetLoopRegion(Option<usize>, Option<usize>), // start, end (None = no loop region)
+    // Song mode
+    SetSongMode(Vec<Vec<Vec<u8>>>),
     ClearSongMode,
 }
 
@@ -800,6 +802,10 @@ impl AudioState {
                     self.pads[pad].fx.phaser.mix = mix;
                 }
             }
+            Cmd::SetLoopRegion(start, end) => {
+                self.seq.loop_start = start;
+                self.seq.loop_end = end;
+            }
             Cmd::SetSongMode(patterns) => {
                 self.seq.song_patterns = patterns;
                 self.seq.song_position = 0;
@@ -828,9 +834,12 @@ struct Sequencer {
     next_step_time: f64,
     pattern: [[u8; MAX_STEPS]; NUM_PADS],
     last_triggers: Option<Vec<u8>>,
+    // Loop region
+    loop_start: Option<usize>,
+    loop_end: Option<usize>,
     // Song mode
-    song_patterns: Vec<Vec<Vec<u8>>>, // ordered list of patterns to chain
-    song_position: usize,             // which pattern in the chain
+    song_patterns: Vec<Vec<Vec<u8>>>,
+    song_position: usize,
     song_mode: bool,
 }
 
@@ -846,6 +855,8 @@ impl Sequencer {
             next_step_time: 0.0,
             pattern: [[0u8; MAX_STEPS]; NUM_PADS],
             last_triggers: None,
+            loop_start: None,
+            loop_end: None,
             song_patterns: Vec::new(),
             song_position: 0,
             song_mode: false,
@@ -868,9 +879,10 @@ impl Sequencer {
             self.counter -= self.next_step_time;
             self.current_step += 1;
 
-            // Check if pattern completed
-            if self.current_step >= self.num_steps {
-                self.current_step = 0;
+            // Check if we've hit the loop end or pattern end
+            let effective_end = self.loop_end.map(|e| e + 1).unwrap_or(self.num_steps);
+            if self.current_step >= effective_end {
+                self.current_step = self.loop_start.unwrap_or(0);
                 // Song mode: advance to next pattern
                 if self.song_mode && !self.song_patterns.is_empty() {
                     self.song_position += 1;

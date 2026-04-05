@@ -1718,6 +1718,7 @@ impl BeatForge {
                     .min_size(vec2(14.0, 14.0))).clicked() {
                     self.loop_start = None;
                     self.loop_end = None;
+                    self.sync_loop_region();
                 }
             } else {
                 ui.label(RichText::new("Shift+click step # to set loop").size(7.0).color(muted_color()));
@@ -1948,6 +1949,7 @@ impl BeatForge {
                                 self.loop_start = Some(step);
                                 self.loop_end = None;
                             }
+                            self.sync_loop_region();
                         }
                     }
 
@@ -3889,6 +3891,10 @@ impl BeatForge {
                 }
             }
         }
+    }
+
+    fn sync_loop_region(&self) {
+        self.engine.send(Cmd::SetLoopRegion(self.loop_start, self.loop_end));
     }
 
     /// Record a parameter change to automation if auto_rec is enabled
