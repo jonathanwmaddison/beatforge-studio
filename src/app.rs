@@ -319,6 +319,9 @@ pub struct BeatForge {
     midi_connected: std::sync::Arc<std::sync::atomic::AtomicBool>,
     midi_device_name: String,
 
+    // Channel settings popup
+    show_channel_settings: Option<usize>, // Some(pad_idx) when open
+
     // Project state
     project_name: String,
     project_dirty: bool,
@@ -394,6 +397,7 @@ impl BeatForge {
             stereo_width: 1.0,
             velocity_curve: 0, // 0=linear, 1=exp, 2=log
             delay_division: 1,
+            show_channel_settings: None,
             project_name: "Untitled".to_string(),
             project_dirty: false,
             last_save_path: None,
@@ -1613,6 +1617,138 @@ impl eframe::App for BeatForge {
                 });
         }
 
+        // Channel settings popup
+        if let Some(ch) = self.show_channel_settings {
+            let ch_name = self.pad_names[ch].clone();
+            let ch_color = self.pad_colors[ch];
+            Window::new(format!("Channel: {}", ch_name))
+                .collapsible(false)
+                .resizable(true)
+                .default_size([500.0, 350.0])
+                .show(ctx, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new(&ch_name).size(14.0).strong().color(ch_color).family(FontFamily::Monospace));
+                        ui.label(RichText::new(match self.pad_types[ch] {
+                            PadType::Synth => "DRUM SYNTH",
+                            PadType::SubSynth => "SUB SYNTH",
+                            PadType::Sample => "SAMPLE",
+                            PadType::Empty => "EMPTY",
+                        }).size(9.0).color(dim()));
+                        // Level meter
+                        let level = self.engine.shared.get_pad_level(ch);
+                        let db = if level > 0.001 { 20.0 * level.log10() } else { -60.0 };
+                        ui.label(RichText::new(format!("{:.1} dB", db)).size(10.0)
+                            .color(if db > -3.0 { red() } else { dim() }).family(FontFamily::Monospace));
+                    });
+                    ui.separator();
+
+                    ui.columns(2, |cols| {
+                        // LEFT: Mixer params
+                        cols[0].label(RichText::new("MIXER").size(9.0).color(accent()).family(FontFamily::Monospace));
+                        cols[0].horizontal(|ui| {
+                            ui.label(RichText::new("VOL").size(8.0).color(muted_color()));
+                            if ui.add(Slider::new(&mut self.volumes[ch], 0.0..=1.0).show_value(true)).changed() {
+                                self.engine.send(Cmd::SetPadVol(ch, self.volumes[ch]));
+                            }
+                        });
+                        cols[0].horizontal(|ui| {
+                            ui.label(RichText::new("PAN").size(8.0).color(muted_color()));
+                            if ui.add(Slider::new(&mut self.pans[ch], -1.0..=1.0).show_value(true)).changed() {
+                                self.engine.send(Cmd::SetPadPan(ch, self.pans[ch]));
+                            }
+                        });
+                        cols[0].horizontal(|ui| {
+                            ui.label(RichText::new("PITCH").size(8.0).color(muted_color()));
+                            if ui.add(Slider::new(&mut self.pitches[ch], -24.0..=24.0).step_by(1.0).show_value(true).suffix("st")).changed() {
+                                self.engine.send(Cmd::SetPadPitch(ch, self.pitches[ch]));
+                            }
+                        });
+                        cols[0].horizontal(|ui| {
+                            ui.label(RichText::new("FILT").size(8.0).color(muted_color()));
+                            if ui.add(Slider::new(&mut self.filters[ch], 100.0..=20000.0).logarithmic(true).show_value(true).suffix("Hz")).changed() {
+                                self.engine.send(Cmd::SetPadFilter(ch, self.filters[ch]));
+                            }
+                        });
+                        cols[0].horizontal(|ui| {
+                            ui.label(RichText::new("ATK").size(8.0).color(muted_color()));
+                            if ui.add(Slider::new(&mut self.pad_attack[ch], 0.0..=0.5).logarithmic(true).show_value(true).suffix("s")).changed() {
+                                self.engine.send(Cmd::SetPadAttack(ch, self.pad_attack[ch]));
+                            }
+                        });
+                        cols[0].horizontal(|ui| {
+                            ui.label(RichText::new("REL").size(8.0).color(muted_color()));
+                            if ui.add(Slider::new(&mut self.pad_release[ch], 0.0..=2.0).logarithmic(true).show_value(true).suffix("s")).changed() {
+                                self.engine.send(Cmd::SetPadRelease(ch, self.pad_release[ch]));
+                            }
+                        });
+                        cols[0].horizontal(|ui| {
+                            ui.label(RichText::new("VERB").size(8.0).color(muted_color()));
+                            if ui.add(Slider::new(&mut self.reverb_sends[ch], 0.0..=1.0).show_value(false)).changed() {
+                                self.engine.send(Cmd::SetPadReverbSend(ch, self.reverb_sends[ch]));
+                            }
+                            ui.label(RichText::new("DLY").size(8.0).color(muted_color()));
+                            if ui.add(Slider::new(&mut self.delay_sends[ch], 0.0..=1.0).show_value(false)).changed() {
+                                self.engine.send(Cmd::SetPadDelaySend(ch, self.delay_sends[ch]));
+                            }
+                        });
+
+                        // RIGHT: FX params
+                        cols[1].label(RichText::new("INSERT FX").size(9.0).color(accent()).family(FontFamily::Monospace));
+                        let p = &mut self.fx_params[ch];
+                        let mut fx_changed = false;
+                        cols[1].horizontal(|ui| {
+                            ui.label(RichText::new("DIST").size(8.0).color(Color32::from_rgb(239, 68, 68)));
+                            fx_changed |= ui.add(Slider::new(&mut p[0], 0.0..=1.0).show_value(false)).changed();
+                            fx_changed |= ui.add(Slider::new(&mut p[1], 0.0..=1.0).show_value(false)).changed();
+                        });
+                        cols[1].horizontal(|ui| {
+                            ui.label(RichText::new("CRUSH").size(8.0).color(Color32::from_rgb(168, 85, 247)));
+                            fx_changed |= ui.add(Slider::new(&mut p[2], 1.0..=16.0).step_by(1.0).show_value(true)).changed();
+                            fx_changed |= ui.add(Slider::new(&mut p[4], 0.0..=1.0).show_value(false)).changed();
+                        });
+                        cols[1].horizontal(|ui| {
+                            ui.label(RichText::new("CHOR").size(8.0).color(Color32::from_rgb(6, 182, 212)));
+                            fx_changed |= ui.add(Slider::new(&mut p[7], 0.0..=1.0).show_value(false)).changed();
+                        });
+                        cols[1].horizontal(|ui| {
+                            ui.label(RichText::new("PHAS").size(8.0).color(Color32::from_rgb(34, 197, 94)));
+                            fx_changed |= ui.add(Slider::new(&mut p[11], 0.0..=1.0).show_value(false)).changed();
+                        });
+                        if fx_changed {
+                            self.engine.send(Cmd::SetPadDistortion { pad: ch, drive: p[0], mix: p[1] });
+                            self.engine.send(Cmd::SetPadBitcrush { pad: ch, bits: p[2], rate: p[3], mix: p[4] });
+                            self.engine.send(Cmd::SetPadChorus { pad: ch, rate: p[5], depth: p[6], mix: p[7] });
+                            self.engine.send(Cmd::SetPadPhaser { pad: ch, rate: p[8], depth: p[9], feedback: p[10], mix: p[11] });
+                        }
+
+                        // EQ
+                        cols[1].label(RichText::new("EQ").size(9.0).color(accent()).family(FontFamily::Monospace));
+                        let eq = &mut self.eq_params[ch];
+                        let mut eq_changed = false;
+                        cols[1].horizontal(|ui| {
+                            ui.label(RichText::new("LOW").size(8.0).color(red()));
+                            eq_changed |= ui.add(Slider::new(&mut eq.low_gain, -12.0..=12.0).show_value(true).suffix("dB")).changed();
+                        });
+                        cols[1].horizontal(|ui| {
+                            ui.label(RichText::new("MID").size(8.0).color(green()));
+                            eq_changed |= ui.add(Slider::new(&mut eq.mid_gain, -12.0..=12.0).show_value(true).suffix("dB")).changed();
+                        });
+                        cols[1].horizontal(|ui| {
+                            ui.label(RichText::new("HIGH").size(8.0).color(Color32::from_rgb(6, 182, 212)));
+                            eq_changed |= ui.add(Slider::new(&mut eq.high_gain, -12.0..=12.0).show_value(true).suffix("dB")).changed();
+                        });
+                        if eq_changed {
+                            self.engine.send(Cmd::SetPadEq(ch, eq.clone()));
+                        }
+                    });
+
+                    ui.separator();
+                    if ui.button("Close").clicked() {
+                        self.show_channel_settings = None;
+                    }
+                });
+        }
+
         // About dialog
         if self.show_about {
             Window::new("About BeatForge Studio")
@@ -2821,7 +2957,9 @@ impl BeatForge {
                         let color = self.pad_colors[pad_idx];
 
                         // Name
-                        ui.label(RichText::new(&self.pad_names[pad_idx]).size(8.0).strong().color(color).family(FontFamily::Monospace));
+                        if ui.add(Button::new(RichText::new(&self.pad_names[pad_idx]).size(8.0).strong().color(color).family(FontFamily::Monospace)).frame(false)).double_clicked() {
+                            self.show_channel_settings = Some(pad_idx);
+                        }
 
                         // Fader (vertical)
                         let fader_h = (avail_h - 80.0).max(40.0);
@@ -3060,6 +3198,11 @@ impl BeatForge {
                     }
                     ui.label(RichText::new(format!("{}", (self.master_vol * 100.0) as u32))
                         .size(10.0).color(accent()).family(FontFamily::Monospace));
+                    // Master dB readout
+                    let m_level = self.engine.shared.get_master_level();
+                    let db = if m_level > 0.001 { 20.0 * m_level.log10() } else { -60.0 };
+                    let db_color = if db > -3.0 { red() } else if db > -12.0 { accent() } else { green() };
+                    ui.label(RichText::new(format!("{:.1}dB", db)).size(9.0).color(db_color).family(FontFamily::Monospace));
                 });
             });
         });
