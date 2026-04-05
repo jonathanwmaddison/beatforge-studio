@@ -195,6 +195,9 @@ pub struct BeatForge {
     reverb_mix: f32,
     delay_mix: f32,
 
+    // Per-pad bus routing (0=master, 1-3=bus)
+    channel_bus: Vec<u8>,
+
     // Per-pad drum voice tuning
     drum_tune: Vec<f32>,
     drum_decay: Vec<f32>,
@@ -460,6 +463,7 @@ impl BeatForge {
             step_cursor: 0,
             detected_bpm: None,
             sample_info: None,
+            channel_bus: vec![0u8; NUM_PADS],
             drum_tune: vec![0.0; NUM_PADS],
             drum_decay: vec![1.0; NUM_PADS],
             drum_color: vec![0.3; NUM_PADS],
@@ -3557,7 +3561,52 @@ impl BeatForge {
                                 }
                             }
                         });
+                        // Bus routing selector
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 1.0;
+                            let labels = ["M", "B1", "B2", "B3"];
+                            for (b, &lbl) in labels.iter().enumerate() {
+                                let active = self.channel_bus[pad_idx] == b as u8;
+                                let fill = if active { Color32::from_rgb(168, 85, 247) } else { Color32::from_gray(24) };
+                                if ui.add(Button::new(RichText::new(lbl).size(6.0)
+                                    .color(if active { Color32::BLACK } else { Color32::from_gray(55) }))
+                                    .fill(fill).min_size(vec2(12.0, 11.0))).clicked() {
+                                    self.channel_bus[pad_idx] = b as u8;
+                                    self.engine.send(Cmd::SetChannelBus(pad_idx, b as u8));
+                                }
+                            }
+                        });
                     });
+                }
+
+                // Bus channels (13/14/15) — show as labeled separators
+                for bus in 0..3u8 {
+                    let bus_pad = 13 + bus as usize;
+                    if bus_pad < NUM_PADS {
+                        ui.separator();
+                        ui.vertical(|ui| {
+                            ui.set_width(40.0);
+                            ui.label(RichText::new(format!("BUS{}", bus + 1)).size(7.0)
+                                .color(Color32::from_rgb(168, 85, 247)).family(FontFamily::Monospace));
+                            // Compact fader
+                            let (r, p) = ui.allocate_painter(vec2(40.0, 60.0), Sense::click_and_drag());
+                            let fr = r.rect;
+                            p.rect_filled(Rect::from_min_size(pos2(fr.center().x - 2.0, fr.top()), vec2(4.0, fr.height())),
+                                2.0, Color32::from_gray(16));
+                            let fill_h = self.volumes[bus_pad] * fr.height();
+                            p.rect_filled(Rect::from_min_size(pos2(fr.center().x - 2.0, fr.bottom() - fill_h), vec2(4.0, fill_h)),
+                                2.0, color_alpha(Color32::from_rgb(168, 85, 247), 100));
+                            if r.dragged() || r.clicked() {
+                                if let Some(pos) = r.interact_pointer_pos() {
+                                    self.volumes[bus_pad] = 1.0 - ((pos.y - fr.top()) / fr.height()).clamp(0.0, 1.0);
+                                    self.engine.send(Cmd::SetPadVol(bus_pad, self.volumes[bus_pad]));
+                                }
+                            }
+                            // Count routed channels
+                            let routed = (0..13).filter(|&i| self.channel_bus[i] == bus + 1).count();
+                            ui.label(RichText::new(format!("{} ch", routed)).size(7.0).color(dim()).family(FontFamily::Monospace));
+                        });
+                    }
                 }
 
                 // Master strip

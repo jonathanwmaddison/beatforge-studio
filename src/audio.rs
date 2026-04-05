@@ -104,6 +104,8 @@ pub enum Cmd {
     SetPadRelease(usize, f32),
     SetPadLoopMode(usize, bool),
     SetDrumParams(usize, f32, f32, f32), // pad, tune, decay, color
+    // Mixer routing: send channel output to a bus (0=master, 1-3=bus channels 14-16)
+    SetChannelBus(usize, u8),
     // Loop region
     SetLoopRegion(Option<usize>, Option<usize>),
     // Song mode
@@ -467,20 +469,47 @@ impl AudioState {
                 }
             }
 
-            // Mix to stereo with per-channel sends
+            // Mix to stereo with bus routing and per-channel sends
             let (mut left, mut right) = (0.0f32, 0.0f32);
             let mut reverb_bus = 0.0f32;
             let mut delay_bus = 0.0f32;
+            // Bus accumulators (bus 1/2/3 = channels 13/14/15)
+            let mut bus_sums = [0.0f32; 3];
+
             for (i, &s) in pad_outputs.iter().enumerate() {
                 if s.abs() < 1e-10 { continue; }
                 let pad = &self.pads[i];
                 let pan_l = ((1.0 - pad.pan) * 0.5).sqrt();
                 let pan_r = ((1.0 + pad.pan) * 0.5).sqrt();
-                left += s * pan_l;
-                right += s * pan_r;
-                // Per-channel sends
+
+                if pad.bus_route > 0 && pad.bus_route <= 3 {
+                    // Route to bus (mono sum for now)
+                    bus_sums[(pad.bus_route - 1) as usize] += s;
+                } else {
+                    // Direct to master
+                    left += s * pan_l;
+                    right += s * pan_r;
+                }
+                // Per-channel sends (always go to FX regardless of bus routing)
                 reverb_bus += s * pad.reverb_send;
                 delay_bus += s * pad.delay_send;
+            }
+
+            // Process bus channels through their EQ/FX, then add to master
+            for bus in 0..3usize {
+                if bus_sums[bus].abs() > 1e-10 {
+                    let bus_pad = 13 + bus;
+                    if bus_pad < NUM_PADS {
+                        let vol = self.pads[bus_pad].vol;
+                        let pan = self.pads[bus_pad].pan;
+                        let scaled = bus_sums[bus] * vol;
+                        let filtered = self.pads[bus_pad].filter.tick(scaled);
+                        let fxed = self.pads[bus_pad].fx.process(filtered);
+                        let eqed = self.pads[bus_pad].eq.process(fxed);
+                        left += eqed * ((1.0 - pan) * 0.5).sqrt();
+                        right += eqed * ((1.0 + pan) * 0.5).sqrt();
+                    }
+                }
             }
 
             // Gross Beat effect on master
@@ -873,6 +902,9 @@ impl AudioState {
             Cmd::SetPadAttack(i, v) => { if i < NUM_PADS { self.pads[i].amp_attack = v; } }
             Cmd::SetPadRelease(i, v) => { if i < NUM_PADS { self.pads[i].amp_release = v; } }
             Cmd::SetPadLoopMode(i, m) => { if i < NUM_PADS { self.pads[i].loop_mode = m; } }
+            Cmd::SetChannelBus(i, bus) => {
+                if i < NUM_PADS { self.pads[i].bus_route = bus; }
+            }
             Cmd::SetDrumParams(i, tune, decay, color) => {
                 if i < NUM_PADS {
                     self.pads[i].drum_tune = tune;
@@ -1041,6 +1073,7 @@ struct Pad {
     choke_group: u8,
     reverb_send: f32,
     delay_send: f32,
+    bus_route: u8,     // 0=direct to master, 1/2/3=bus channel 13/14/15
     // Per-pad sample envelope
     amp_attack: f32,
     amp_release: f32,
@@ -1075,6 +1108,7 @@ impl Pad {
             choke_group: choke,
             reverb_send: 0.0,
             delay_send: 0.0,
+            bus_route: 0,
             amp_attack: 0.001,
             amp_release: 0.01,
             drum_tune: 0.0,
