@@ -209,6 +209,12 @@ pub struct BeatForge {
     is_recording: bool,
     record_start_time: f64,
 
+    // Export state
+    show_export: bool,
+    export_bars: usize,
+    exporting: bool,
+    export_steps_remaining: i32,
+
     // Zoom level for sequencer/piano roll (1.0 = default)
     seq_zoom: f32,
 
@@ -433,6 +439,10 @@ impl BeatForge {
             auto_target: AutoTarget::FilterCutoff,
             is_recording: false,
             record_start_time: 0.0,
+            show_export: false,
+            export_bars: 2,
+            exporting: false,
+            export_steps_remaining: -1,
             seq_zoom: 1.0,
             step_input: false,
             step_cursor: 0,
@@ -1177,18 +1187,9 @@ impl eframe::App for BeatForge {
                             }
                         }
                     }
-                    // Stem export button
-                    if ui.button(RichText::new("STEMS").size(8.0).color(Color32::from_rgb(6, 182, 212))).clicked() {
-                        if let Some(dir) = rfd::FileDialog::new().pick_folder() {
-                            // Export each active pad as a separate WAV
-                            // (This triggers recording of individual channels — placeholder for now)
-                            for i in 0..NUM_PADS {
-                                if self.pad_types[i] != PadType::Empty {
-                                    let stem_path = dir.join(format!("{}_{}.wav", i + 1, self.pad_names[i]));
-                                    eprintln!("Stem export: {} (placeholder — needs offline render)", stem_path.display());
-                                }
-                            }
-                        }
+                    // Export WAV button
+                    if ui.button(RichText::new("EXPORT").size(8.0).color(accent())).clicked() {
+                        self.show_export = !self.show_export;
                     }
                 });
             });
@@ -1713,6 +1714,67 @@ impl eframe::App for BeatForge {
                     ui.add_space(4.0);
                     if ui.button("Close").clicked() { self.show_help = false; }
                 });
+        }
+
+        // Export dialog
+        if self.show_export {
+            Window::new("Export WAV")
+                .collapsible(false)
+                .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
+                .show(ctx, |ui| {
+                    ui.label(RichText::new("EXPORT TO WAV").size(12.0).strong().color(accent()));
+                    ui.add_space(8.0);
+
+                    ui.horizontal(|ui| {
+                        ui.label("Bars to export:");
+                        ui.add(egui::DragValue::new(&mut self.export_bars).range(1..=32).speed(0.1));
+                    });
+
+                    let total_steps = self.export_bars * self.num_steps;
+                    let duration = total_steps as f32 * 60.0 / self.bpm / 4.0;
+                    ui.label(RichText::new(format!("{} steps · {:.1}s at {:.0} BPM", total_steps, duration, self.bpm))
+                        .size(10.0).color(dim()));
+
+                    ui.add_space(8.0);
+
+                    if self.exporting {
+                        let progress = if self.export_steps_remaining > 0 {
+                            1.0 - self.export_steps_remaining as f32 / (self.export_bars * self.num_steps) as f32
+                        } else { 1.0 };
+                        ui.add(egui::ProgressBar::new(progress).text(format!("Exporting... {:.0}%", progress * 100.0)));
+                    } else {
+                        if ui.add(Button::new(RichText::new("Export WAV").size(11.0).strong().color(Color32::BLACK))
+                            .fill(accent()).min_size(vec2(120.0, 28.0))).clicked() {
+                            // Start export: begin recording + playback for N bars
+                            self.sync_pattern();
+                            self.engine.send(Cmd::StartRecording);
+                            self.engine.send(Cmd::Play);
+                            self.playing = true;
+                            self.exporting = true;
+                            self.export_steps_remaining = (self.export_bars * self.num_steps) as i32;
+                        }
+                        if ui.button("Cancel").clicked() {
+                            self.show_export = false;
+                        }
+                    }
+                });
+        }
+
+        // Export state machine: count down steps, then stop and save
+        if self.exporting && self.playing {
+            let step = current_step;
+            if step >= 0 {
+                self.export_steps_remaining -= 1;
+                if self.export_steps_remaining <= 0 {
+                    // Stop and save
+                    self.engine.send(Cmd::Stop); self.engine.send(Cmd::AllNotesOff);
+                    self.engine.send(Cmd::StopRecording);
+                    self.playing = false;
+                    self.exporting = false;
+                    self.show_export = false;
+                }
+            }
+            ctx.request_repaint();
         }
 
         // Channel settings popup
