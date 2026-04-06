@@ -1,55 +1,58 @@
-# ═══════════════════════════════════════════
-#  "Midnight Session" — Full Production Demo
-#  Shows EVERY BeatForge Script feature
-# ═══════════════════════════════════════════
+# "Midnight Session" — Full Production Demo
+# BeatForge Studio — Shows every feature
 
-# ── Setup ────────────────────────────────
 bpm 88
 swing 30
 steps 32
 kit 808
 
-# ── Master chain ─────────────────────────
+# Master chain
 reverb 0.25
 delay 0.15
-enhancer 0.3
-width 1.2
+enhancer 0.30
+width 1.20
 
-# ── Drums (2-bar loop) ──────────────────
-kick  "x.....x...x.....x.....x.x.x....."
-snare "....x.......x.......x.......x..+"
-hh    "x.xox.x.x.xox.x.x.xox.x.x.xox.x."
-clap  "....x.......x.......x.......x..."
+# ── Variables ────────────────────────
+let verse_kick = x.....x...x.....x.....x...x.....
+let verse_snare = ....x.......x.+.....x.......x..+
+let hats = x.xox.x.x.xox.x.x.xox.x.x.xox.x.
 
-# ── Drum mix ─────────────────────────────
-vol kick 0.9
+# ── Drums ────────────────────────────
+kick     "$verse_kick"
+snare    "$verse_snare"
+hh       "$hats"
+clap     "....x.......x.......x.......x..."
+rim      "......+.......+.......+.......+."
+
+# ── Drum mix ─────────────────────────
+vol kick 0.90
 vol snare 0.75
-vol hh 0.55
-vol clap 0.6
-
+vol hh 0.50
+vol clap 0.60
+vol rim 0.35
 pan hh -0.25
-filter kick 250
+pan rim 0.30
 lpf hh 6000
 dist kick 0.15
-
-# ── Sidechain ────────────────────────────
+sendverb snare 0.20
+senddly rim 0.30
 sidechain kick snare
 sidechain kick hh
 
-# ── Synth bass ───────────────────────────
-synth pad10 "808 Sub"
-note "C2 ~ ~ ~ Eb2 ~ ~ ~ G1 ~ ~ ~ ~ ~ Ab1 ~ C2 ~ ~ ~ Eb2 ~ ~ ~ G1 ~ ~ ~ ~ ~ ~ ~"
+# ── Bass ─────────────────────────────
+scale C minor
+note "C2 ~ ~ ~ Eb2 ~ ~ ~ G1 ~ ~ ~ Ab1 ~ ~ ~ C2 ~ ~ ~ Eb2 ~ ~ ~ G1 ~ ~ ~ ~ ~ ~ ~"
 
-# ── Lead melody ──────────────────────────
-synth pad12 "Saw Lead"
+# ── Chords ───────────────────────────
+chord "Cm7 Fm7 Gm7 Fm7"
+
+# ── Lead melody ──────────────────────
 note "C4 ~ Eb4 ~ G4 ~ Eb4 C4 ~ ~ Bb3 ~ ~ ~ ~ ~ C4 ~ Eb4 ~ G4 Bb4 G4 Eb4 C4 ~ ~ ~ ~ ~ ~ ~"
 
-# ── Euclidean percussion ─────────────────
+# ── Euclidean percussion ─────────────
 euclidean perc 5 32
 euclidean cowbell 3 32
-vol perc 0.3
-vol cowbell 0.25
-
-# ── FX sends ─────────────────────────────
-sendverb snare 0.2
-senddly clap 0.3
+vol perc 0.25
+vol cowbell 0.20
+pan perc -0.40
+pan cowbell 0.45

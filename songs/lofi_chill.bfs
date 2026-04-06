@@ -1,20 +1,41 @@
 # "Late Night Study" — Lo-Fi Hip Hop
+# BeatForge Studio
+
 bpm 78
 swing 35
 steps 32
+kit 808
+
+# Master
 reverb 0.35
-delay 0.2
+delay 0.20
+enhancer 0.25
+width 1.15
 
-kick  "x.....x...x.....x.....x...x....."
-snare "....x.......x.......x.......x..+"
-hh    "x.xox.x.x.xox.x.x.xox.x.x.xox.x."
-oh    "..........x...............x....."
-rim   "......+.......+.......+.......+."
+# Drums
+kick     "x.....x...x.....x.....x...x....."
+snare    "....x.......x.+.....x.......x..+"
+hh       "x.xox.x.x.xox.x.x.xox.x.x.xox.x."
+oh       "..........x...............x....."
+rim      "......+.......+.......+.......+."
 
+# Drum mix
 vol kick 0.85
-vol snare 0.7
-vol hh 0.5
-vol rim 0.35
-pan hh -0.2
+vol snare 0.70
+vol hh 0.45
+vol oh 0.35
+vol rim 0.30
+pan hh -0.20
+pan rim 0.25
+lpf hh 5000
+dist kick 0.10
+sendverb snare 0.25
+senddly rim 0.30
+sidechain kick hh
 
+# Bass
+scale C minor
 note "C2 ~ ~ ~ Eb2 ~ ~ ~ G1 ~ ~ ~ Ab1 ~ ~ ~ C2 ~ ~ ~ Eb2 ~ ~ ~ G1 ~ ~ ~ ~ ~ ~ ~"
+
+# Chords (assign synth on pad 12 → Warm Pad)
+chord "Cm7 Fm7 Gm7 Fm7"

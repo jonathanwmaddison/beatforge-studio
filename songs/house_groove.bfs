@@ -1,26 +1,42 @@
 # "Midnight Groove" — Deep House
+# BeatForge Studio
+
 bpm 124
 swing 15
 steps 32
-reverb 0.3
+kit 808
+
+# Master
+reverb 0.30
 delay 0.25
+enhancer 0.20
+width 1.25
 
-kick  "x...x...x...x...x...x...x...x..."
-clap  "....x.......x.......x.......x..."
-hh    "..x...x...x...x...x...x...x...x."
-oh    "......x.......x.......x.......x."
-rim   "x.......x.......x.......x......."
-perc  "..x..x....x..x....x..x....x..x.."
+# Drums — 4-on-floor with groove
+kick     "x...x...x...x...x...x...x...x..."
+clap     "....x.......x.......x.......x..."
+hh       "..x...x...x...x...x...x...x...x."
+oh       "......x.......x.......x.......x."
+rim      "x.......x.......x.......x......."
+perc     "..x..x....x..x....x..x....x..x.."
 
-vol kick 0.9
+# Drum mix
+vol kick 0.90
 vol clap 0.65
-vol hh 0.45
-vol oh 0.35
-vol rim 0.3
-vol perc 0.25
-pan hh 0.2
-pan oh -0.2
+vol hh 0.40
+vol oh 0.30
+vol rim 0.25
+vol perc 0.20
+pan hh 0.20
+pan oh -0.20
+pan perc 0.35
 sendverb clap 0.35
-senddly oh 0.2
+senddly oh 0.20
+sidechain kick hh
 
+# Rolling bass
+scale C minor
 note "C2 C2 G2 G2 Ab2 Ab2 Eb2 Eb2 F2 F2 C2 C2 G2 G2 ~ ~ C2 C2 G2 G2 Ab2 Ab2 Eb2 Eb2 F2 F2 C2 C2 ~ ~ ~ ~"
+
+# Chord stabs
+chord "Cm Fm Gm Cm"

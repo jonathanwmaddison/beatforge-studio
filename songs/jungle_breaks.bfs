@@ -1,25 +1,39 @@
 # "Concrete Jungle" — Jungle / DnB
+# BeatForge Studio
+
 bpm 170
 swing 5
 steps 32
-reverb 0.2
-delay 0.3
+kit 808
 
-kick  "x..x....x..x..x.x..x....x..x..x."
-snare "....x..+....x.......x..+....x..."
-hh    "x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x."
-oh    ".......x...............x........"
+# Master
+reverb 0.20
+delay 0.30
+enhancer 0.35
+width 1.15
 
+# Breakbeat
+kick     "x..x....x..x..x.x..x....x..x..x."
+snare    "....x..+....x.......x..+....x..."
+hh       "x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x."
+oh       ".......x...............x........"
+
+# Euclidean percussion
 euclidean perc 7 32
 euclidean rim 5 32
 
-vol kick 0.9
-vol snare 0.8
-vol hh 0.45
-vol perc 0.3
-vol rim 0.25
-pan perc 0.3
-pan rim -0.3
-dist kick 0.1
+# Drum mix
+vol kick 0.90
+vol snare 0.80
+vol hh 0.40
+vol perc 0.25
+vol rim 0.20
+pan perc 0.30
+pan rim -0.30
+dist kick 0.10
+sendverb snare 0.15
+senddly oh 0.40
 
+# Heavy sub bass
+scale C minor
 note "C1 ~ ~ ~ ~ ~ ~ ~ C1 ~ Eb1 ~ F1 ~ ~ ~ C1 ~ ~ ~ ~ ~ ~ ~ C1 ~ Eb1 ~ ~ ~ ~ ~"

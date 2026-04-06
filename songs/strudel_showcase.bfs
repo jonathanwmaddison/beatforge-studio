@@ -1,123 +1,94 @@
-# ═══════════════════════════════════════════
-#  "Pattern Algebra" — Strudel Feature Showcase
-#  Demonstrates every BeatForge Script feature
-# ═══════════════════════════════════════════
+# "Pattern Algebra" — BeatForge Script Reference
+# Every feature demonstrated with examples
 
+# ════════════════════════════════════
+#  SETUP
+# ════════════════════════════════════
 bpm 120
 swing 0
+steps 16
 
 # ════════════════════════════════════
 #  1. TRACKER NOTATION
-#     Traditional step sequencer style
 # ════════════════════════════════════
-
-kick  "x...x...x...x..."
-snare "....x.......x..."
-hh    "x.x.x.x.x.x.x.x."
-
-# Velocity: x=hard, o=medium, +=soft, .=rest
-hh    "x.o+x.o+x.o+x.o+"
+# x=hard o=medium +=soft .=rest
+kick     "x...x...x...x..."
+snare    "....x.......x..."
+hh       "x.o+x.o+x.o+x.o+"
 
 # ════════════════════════════════════
-#  2. MINI-NOTATION
-#     Strudel-style one-liners
+#  2. MINI-NOTATION (Strudel-style)
 # ════════════════════════════════════
-
-# Basic sequence (evenly divided):
-"kick snare hh clap"
-
-# Repeat (hh plays 8 times):
-"kick snare hh*8 clap"
-
-# Subdivision (snare+clap in half the time):
-"kick [snare clap] hh*4"
-
-# ════════════════════════════════════
-#  3. STRUDEL CHAINING
-#     s() and n() with transforms
-# ════════════════════════════════════
-
-# Speed up the whole pattern:
-s("kick snare hh clap").fast(2)
-
-# Reverse:
-s("kick snare hh clap").rev()
-
-# Euclidean rhythm:
-s("kick").euclid(3,8)
+# Sequence:     "kick snare hh clap"
+# Subdivision:  "[snare clap]"
+# Speed up:     "hh*8"
+# Alternation:  "<kick snare hh>"
+# Euclidean:    "kick(3,16)"
+# Degrade:      "hh*8?0.5"
+# Stack:        "kick , snare"
+# Weight:       "kick@2 snare"
+# Replicate:    "bd!2 sd"
 
 # ════════════════════════════════════
-#  4. ADVANCED OPERATORS
+#  3. VARIABLES
 # ════════════════════════════════════
-
-# Stack (play simultaneously):
-# "kick , hh*4"
-
-# Random choice (different each cycle):
-# "kick | snare | clap"
-
-# Probability (50% chance each hit):
-# "hh*8?0.5"
-
-# Euclidean shorthand:
-# "kick(3,16)"
-# "snare(5,16)"
-# "hh(7,16)"
+# let name = value
+# use with $name or {name}
+let beat = x...x...x...x...
+# kick "$beat"
 
 # ════════════════════════════════════
-#  5. MELODY
+#  4. MELODY & CHORDS
 # ════════════════════════════════════
+# Note names:
+note "C4 E4 G4 C5 ~ G4 E4 C4"
 
-# Note names → piano roll:
-note "C4 E4 G4 C5"
+# Chord progressions:
+chord "Am Dm G C"
 
-# With rests:
-note "C4 ~ E4 ~ G4 ~ C5 ~"
-
-# With repeats:
-note "C4*2 E4 G4*2 C5"
-
-# Sharps and flats:
-note "C4 D#4 F#4 A4"
-note "Db4 Eb4 Gb4 Bb4"
+# Scale + degrees:
+scale C major
+deg "0 2 4 5 7 5 4 2"
 
 # ════════════════════════════════════
-#  6. TRANSFORMS
+#  5. MIX FROM CODE
 # ════════════════════════════════════
-
-# Reverse a pattern:
-reverse kick
-
-# Rotate (shift right):
-rotate snare 4
-
-# Probability (keep 70% of hits):
-prob hh 0.7
-
-# Euclidean distribution:
-euclidean perc 5 16
-euclidean cowbell 3 16
+vol kick 0.90
+vol hh 0.50
+pan hh -0.25
+lpf hh 5000
+sendverb snare 0.20
+sidechain kick hh
 
 # ════════════════════════════════════
-#  7. GLOBAL COMMANDS
+#  6. MASTER EFFECTS
 # ════════════════════════════════════
-
-bpm 120
-swing 25
-reverb 0.3
-delay 0.2
+reverb 0.25
+delay 0.15
+enhancer 0.30
+width 1.20
 
 # ════════════════════════════════════
-#  8. BIDIRECTIONAL WORKFLOW
+#  7. KITS & SYNTHS
 # ════════════════════════════════════
+# kit 808          # classic drums
+# kit modern       # jazz/industrial
+# kit chops        # amen breaks
+# kit synth        # supersaw/pluck/pad/bass/lead
 
-# Everything here can be:
-# 1. Typed as code (this file)
-# 2. Edited in the visual grid (SEQUENCER tab)
-# 3. Edited in the piano roll (PIANO ROLL tab)
-# 4. Converted back to code (GRID → CODE button)
-#
-# The three views are the SAME DATA:
-#   Code ←→ Grid ←→ Piano Roll
-#
-# Edit anywhere, see updates everywhere.
+# ════════════════════════════════════
+#  8. TRANSFORMS
+# ════════════════════════════════════
+# reverse kick
+# rotate snare 4
+# prob hh 0.7
+# euclidean perc 5 16
+
+# ════════════════════════════════════
+#  9. BIDIRECTIONAL
+# ════════════════════════════════════
+# Everything here syncs with:
+#   SEQUENCER — visual step grid
+#   PIANO ROLL — note editor
+#   MIXER — levels and effects
+#   SAVE/LOAD — .bfs files ARE the project

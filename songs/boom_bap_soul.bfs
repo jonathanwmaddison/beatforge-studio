@@ -1,21 +1,38 @@
 # "Soul Brother" — Boom Bap
+# BeatForge Studio
+
 bpm 92
 swing 45
 steps 32
+kit 808
+
+# Master
 reverb 0.25
 delay 0.15
+enhancer 0.20
+width 1.10
 
-kick  "x......ox..x.....x......ox..x...."
-snare "....x.......x.......x.......x..."
-hh    "x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x."
-oh    "..............x...............x."
-rim   "..x...........x...x...........x."
+# Drums — heavy swing, classic feel
+kick     "x......ox..x.....x......ox..x...."
+snare    "....x.......x.......x.......x..."
+hh       "x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x."
+oh       "..............x...............x."
+rim      "..x...........x...x...........x."
 
+# Drum mix
 vol kick 0.85
 vol snare 0.75
-vol hh 0.5
+vol hh 0.50
 vol rim 0.35
 pan hh -0.15
-sendverb snare 0.2
+lpf hh 6000
+sendverb snare 0.20
+senddly rim 0.25
+sidechain kick hh
 
+# Walking bass
+scale C minor
 note "C2 C2 ~ ~ Eb2 Eb2 ~ ~ F2 ~ G2 ~ Ab2 ~ ~ ~ C2 C2 ~ ~ Eb2 Eb2 ~ ~ F2 ~ G2 ~ ~ ~ ~ ~"
+
+# Soul chords
+chord "Cm7 Fm7 Gm7 Fm7"

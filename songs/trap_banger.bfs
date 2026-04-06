@@ -1,23 +1,39 @@
 # "SLIDE" — Trap / 808
+# BeatForge Studio
+
 bpm 140
 swing 10
 steps 32
+kit 808
+
+# Master
 reverb 0.15
-delay 0.1
+delay 0.10
+enhancer 0.35
+width 1.10
 
-kick  "x.....x.....x.x.x.....x.....x.x."
-snare "....x.......x.......x.......x..."
-hh    "xoxxoxxoxxoxxoxxoxxoxxoxxoxxoxxoxx"
-oh    "..............x...............x."
-clap  "....x.......x.......x.......x..."
+# Drums
+kick     "x.....x.....x.x.x.....x.....x.x."
+snare    "....x.......x.......x.......x..."
+hh       "xoxxoxxoxxoxxoxxoxxoxxoxxoxxoxxoxx"
+oh       "..............x...............x."
+clap     "....x.......x.......x.......x..."
 
-vol kick 0.9
+# Drum mix
+vol kick 0.90
 vol snare 0.75
-vol hh 0.45
+vol hh 0.40
 vol clap 0.65
-vol oh 0.4
+vol oh 0.35
 pan hh 0.15
 lpf hh 7000
+dist kick 0.15
 sidechain kick hh
+sidechain kick oh
 
+# 808 Bass
+scale C minor
 note "C1 ~ ~ ~ ~ ~ ~ ~ Eb1 ~ ~ ~ G1 ~ ~ ~ C1 ~ ~ ~ ~ ~ ~ ~ Eb1 ~ ~ ~ ~ ~ ~ ~"
+
+# Dark lead
+note "C4 ~ Eb4 ~ F4 ~ Eb4 ~ C4 ~ ~ ~ Bb3 ~ ~ ~ C4 ~ Eb4 ~ G4 ~ Eb4 ~ C4 ~ ~ ~ ~ ~ ~ ~"
