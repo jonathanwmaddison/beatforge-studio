@@ -1382,24 +1382,34 @@ impl KickOsc {
         if self.env < 0.001 && self.click_env < 0.001 {
             return 0.0;
         }
+
+        // Main body: sine with pitch envelope sweep (high → low)
         let freq = self.base_freq + self.pitch_depth * self.pitch_env;
         self.phase += freq / sr;
-        let out = (self.phase * TWO_PI).sin() * self.env;
+        let body_raw = (self.phase * TWO_PI).sin();
+        // Gentle saturation on the body for warmth
+        let body = (body_raw * 1.3).tanh() * self.env;
+
         self.pitch_env *= self.pitch_decay;
         self.env *= self.amp_decay;
-        // Sub harmonics for body
-        let sub = (self.phase * 0.5 * TWO_PI).sin() * self.env * 0.3;
-        // Transient click (noise burst)
+
+        // Strong sub-bass (one octave below, louder than before)
+        let sub = (self.phase * 0.5 * TWO_PI).sin() * self.env * 0.55;
+
+        // Transient click: short pitched "tick" at ~2kHz (not just noise)
         let click = if self.click_env > 0.001 {
+            // Mix of pitched tick and noise for a snappy attack
+            let tick = (self.click_env * 120.0 * TWO_PI).sin() * 0.7;
             self.noise_state ^= self.noise_state << 13;
             self.noise_state ^= self.noise_state >> 17;
             self.noise_state ^= self.noise_state << 5;
             let noise = (self.noise_state as f64 / u32::MAX as f64) * 2.0 - 1.0;
-            let c = noise * self.click_env * self.click_amount;
-            self.click_env *= (-1.0 / (sr * 0.003)).exp(); // 3ms click
+            let c = (tick + noise * 0.3) * self.click_env * self.click_amount;
+            self.click_env *= (-1.0 / (sr * 0.004)).exp(); // 4ms click
             c
         } else { 0.0 };
-        (out + sub + click) as f32
+
+        (body + sub + click) as f32
     }
 }
 
