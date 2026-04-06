@@ -4421,6 +4421,26 @@ impl BeatForge {
                     ui.horizontal(|ui| { ui.label(RichText::new("D").size(8.0).color(muted_color())); changed |= ui.add(Slider::new(&mut params.amp_decay, 0.001..=2.0).show_value(false).logarithmic(true)).changed(); });
                     ui.horizontal(|ui| { ui.label(RichText::new("S").size(8.0).color(muted_color())); changed |= ui.add(Slider::new(&mut params.amp_sustain, 0.0..=1.0).show_value(false)).changed(); });
                     ui.horizontal(|ui| { ui.label(RichText::new("R").size(8.0).color(muted_color())); changed |= ui.add(Slider::new(&mut params.amp_release, 0.001..=5.0).show_value(false).logarithmic(true)).changed(); });
+                    // Visual ADSR curve
+                    let (_, env_p) = ui.allocate_painter(vec2(ui.available_width().min(110.0), 35.0), Sense::hover());
+                    let er = env_p.clip_rect();
+                    env_p.rect_filled(er, 2.0, Color32::from_gray(10));
+                    let total = params.amp_attack + params.amp_decay + 0.3 + params.amp_release;
+                    let ax = er.left() + (params.amp_attack / total) * er.width();
+                    let dx = ax + (params.amp_decay / total) * er.width();
+                    let sx = dx + (0.3 / total) * er.width();
+                    let rx = sx + (params.amp_release / total) * er.width();
+                    let sy = er.top() + (1.0 - params.amp_sustain) * (er.height() - 2.0) + 1.0;
+                    let points = vec![
+                        pos2(er.left(), er.bottom()),      // start at 0
+                        pos2(ax, er.top() + 1.0),          // attack peak
+                        pos2(dx, sy),                       // decay to sustain
+                        pos2(sx, sy),                       // sustain hold
+                        pos2(rx.min(er.right()), er.bottom()), // release to 0
+                    ];
+                    for pair in points.windows(2) {
+                        env_p.line_segment([pair[0], pair[1]], Stroke::new(1.5, accent()));
+                    }
                 });
 
                 ui.separator();
@@ -4433,6 +4453,26 @@ impl BeatForge {
                     ui.horizontal(|ui| { ui.label(RichText::new("D").size(8.0).color(muted_color())); changed |= ui.add(Slider::new(&mut params.filt_decay, 0.001..=2.0).show_value(false).logarithmic(true)).changed(); });
                     ui.horizontal(|ui| { ui.label(RichText::new("S").size(8.0).color(muted_color())); changed |= ui.add(Slider::new(&mut params.filt_sustain, 0.0..=1.0).show_value(false)).changed(); });
                     ui.horizontal(|ui| { ui.label(RichText::new("R").size(8.0).color(muted_color())); changed |= ui.add(Slider::new(&mut params.filt_release, 0.001..=5.0).show_value(false).logarithmic(true)).changed(); });
+                    // Visual filter ADSR curve
+                    let (_, env_p) = ui.allocate_painter(vec2(ui.available_width().min(110.0), 35.0), Sense::hover());
+                    let er = env_p.clip_rect();
+                    env_p.rect_filled(er, 2.0, Color32::from_gray(10));
+                    let total = params.filt_attack + params.filt_decay + 0.3 + params.filt_release;
+                    let ax = er.left() + (params.filt_attack / total) * er.width();
+                    let dx = ax + (params.filt_decay / total) * er.width();
+                    let sx = dx + (0.3 / total) * er.width();
+                    let rx = sx + (params.filt_release / total) * er.width();
+                    let sy = er.top() + (1.0 - params.filt_sustain) * (er.height() - 2.0) + 1.0;
+                    let filt_points = vec![
+                        pos2(er.left(), er.bottom()),
+                        pos2(ax, er.top() + 1.0),
+                        pos2(dx, sy),
+                        pos2(sx, sy),
+                        pos2(rx.min(er.right()), er.bottom()),
+                    ];
+                    for pair in filt_points.windows(2) {
+                        env_p.line_segment([pair[0], pair[1]], Stroke::new(1.5, Color32::from_rgb(6, 182, 212)));
+                    }
                 });
 
                 ui.separator();
