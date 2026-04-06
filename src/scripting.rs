@@ -64,7 +64,11 @@ pub enum ScriptCommand {
     SetSwing(f32),
     SetReverb(f32),
     SetDelay(f32),
-    Euclidean(usize, usize, usize), // pad, hits, steps
+    Euclidean(usize, usize, usize),
+    SetPadVol(usize, f32),
+    SetPadPan(usize, f32),
+    SetPadPitch(usize, f32),
+    SetPadFilter(usize, f32),
 }
 
 /// Parse and evaluate a BeatForge Script
@@ -154,6 +158,40 @@ fn parse_line(line: &str, num_steps: usize, result: &mut ScriptResult) -> Result
             if parts.len() >= 2 {
                 if let (Some(pad), Ok(p)) = (pad_index(parts[0]), parts[1].parse::<f32>()) {
                     apply_probability(&mut result.pattern[pad], num_steps, p, 42);
+                }
+            }
+        }
+
+        // Per-pad effect: "pad_name fx_name value"
+        "vol" | "volume" => {
+            let parts: Vec<&str> = arg.split_whitespace().collect();
+            if parts.len() >= 2 {
+                if let (Some(pad), Ok(v)) = (pad_index(parts[0]), parts[1].parse::<f32>()) {
+                    result.commands.push(ScriptCommand::SetPadVol(pad, v.clamp(0.0, 1.0)));
+                }
+            }
+        }
+        "pan" => {
+            let parts: Vec<&str> = arg.split_whitespace().collect();
+            if parts.len() >= 2 {
+                if let (Some(pad), Ok(v)) = (pad_index(parts[0]), parts[1].parse::<f32>()) {
+                    result.commands.push(ScriptCommand::SetPadPan(pad, v.clamp(-1.0, 1.0)));
+                }
+            }
+        }
+        "pitch" => {
+            let parts: Vec<&str> = arg.split_whitespace().collect();
+            if parts.len() >= 2 {
+                if let (Some(pad), Ok(v)) = (pad_index(parts[0]), parts[1].parse::<f32>()) {
+                    result.commands.push(ScriptCommand::SetPadPitch(pad, v.clamp(-24.0, 24.0)));
+                }
+            }
+        }
+        "filter" | "lpf" => {
+            let parts: Vec<&str> = arg.split_whitespace().collect();
+            if parts.len() >= 2 {
+                if let (Some(pad), Ok(v)) = (pad_index(parts[0]), parts[1].parse::<f32>()) {
+                    result.commands.push(ScriptCommand::SetPadFilter(pad, v.clamp(20.0, 20000.0)));
                 }
             }
         }

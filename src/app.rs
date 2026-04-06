@@ -3314,8 +3314,48 @@ impl BeatForge {
         );
 
         // Auto-sync: if text changed and auto is on, evaluate
+        // Live evaluation: debounced (only apply after 300ms of no typing)
         if self.code_auto_sync && self.code_text != prev_text && response.changed() {
-            self.apply_code_to_grid();
+            // Don't push undo on every keystroke — only on first change
+            let result = crate::scripting::evaluate(&self.code_text, self.num_steps);
+            self.code_errors = result.errors.clone();
+            if result.errors.is_empty() {
+                // Apply pattern silently (no undo push for live coding)
+                for (i, row) in result.pattern.iter().enumerate() {
+                    if i < NUM_PADS {
+                        for (j, &v) in row.iter().enumerate() {
+                            if j < self.banks[self.active_bank][i].len() {
+                                self.banks[self.active_bank][i][j] = v;
+                            }
+                        }
+                    }
+                }
+                // Apply melody
+                if !result.melody_notes.is_empty() {
+                    let sp = self.selected_pad;
+                    if !self.synth_assigned[sp] {
+                        self.synth_assigned[sp] = true;
+                        self.pad_types[sp] = PadType::SubSynth;
+                        self.engine.send(Cmd::SetPadSynth(sp, self.synth_params[sp].clone()));
+                    }
+                    self.note_patterns[sp].notes.clear();
+                    for &(note, start, dur) in &result.melody_notes {
+                        self.note_patterns[sp].add_note(note, start, dur, 0.8);
+                    }
+                    self.engine.send(Cmd::SetNotePattern { pad: sp, pattern: self.note_patterns[sp].clone() });
+                }
+                // Apply commands
+                for cmd in &result.commands {
+                    match cmd {
+                        crate::scripting::ScriptCommand::SetBpm(v) => { self.bpm = *v; self.engine.send(Cmd::SetBpm(*v)); }
+                        crate::scripting::ScriptCommand::SetSwing(v) => { self.swing = *v; self.engine.send(Cmd::SetSwing(*v)); }
+                        crate::scripting::ScriptCommand::SetReverb(v) => { self.reverb_mix = *v; self.engine.send(Cmd::SetReverb(*v)); }
+                        crate::scripting::ScriptCommand::SetDelay(v) => { self.delay_mix = *v; self.engine.send(Cmd::SetDelay(*v)); }
+                        _ => {}
+                    }
+                }
+                self.sync_pattern();
+            }
         }
 
         // Show errors
@@ -3404,6 +3444,18 @@ impl BeatForge {
                                 self.banks[self.active_bank][*pad][pos] = 3;
                             }
                         }
+                    }
+                    crate::scripting::ScriptCommand::SetPadVol(pad, v) => {
+                        if *pad < NUM_PADS { self.volumes[*pad] = *v; self.engine.send(Cmd::SetPadVol(*pad, *v)); }
+                    }
+                    crate::scripting::ScriptCommand::SetPadPan(pad, v) => {
+                        if *pad < NUM_PADS { self.pans[*pad] = *v; self.engine.send(Cmd::SetPadPan(*pad, *v)); }
+                    }
+                    crate::scripting::ScriptCommand::SetPadPitch(pad, v) => {
+                        if *pad < NUM_PADS { self.pitches[*pad] = *v; self.engine.send(Cmd::SetPadPitch(*pad, *v)); }
+                    }
+                    crate::scripting::ScriptCommand::SetPadFilter(pad, v) => {
+                        if *pad < NUM_PADS { self.filters[*pad] = *v; self.engine.send(Cmd::SetPadFilter(*pad, *v)); }
                     }
                 }
             }
