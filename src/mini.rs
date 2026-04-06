@@ -123,7 +123,7 @@ fn parse_token_weighted(token: &str) -> WeightedNode {
         if let Some(close) = find_matching_bracket(token, '<', '>') {
             let inner = &token[1..close];
             let rest = &token[close+1..];
-            let items: Vec<MiniNode> = inner.split_whitespace().map(|s| parse(s)).collect();
+            let items: Vec<MiniNode> = tokenize(inner).into_iter().map(|s| parse(&s)).collect();
             let node = MiniNode::Alt(items);
             let (n, w) = apply_suffixes(node, rest);
             return WeightedNode::with_weight(n, w);
@@ -531,5 +531,98 @@ mod tests {
         let e1 = eval(&node, 0.0, 1.0, 1);
         // Should only play on even cycles
         assert!(e0.len() == 1 || e1.len() == 1);
+    }
+}
+
+#[cfg(test)]
+mod real_song_tests {
+    use super::*;
+
+    #[test]
+    fn test_replication_bang() {
+        // "bd!2" = bd bd (not faster, just repeated)
+        let events = eval(&parse("bd!2 sd"), 0.0, 1.0, 0);
+        // bd takes 1/3, bd takes 1/3, sd takes 1/3
+        assert_eq!(events.len(), 3);
+        assert_eq!(events[0].value, "bd");
+        assert_eq!(events[1].value, "bd");
+        assert_eq!(events[2].value, "sd");
+    }
+
+    #[test]
+    fn test_weight_at_sign() {
+        // "Am@3 G" = Am gets 3/4, G gets 1/4
+        let events = eval(&parse("Am@3 G"), 0.0, 1.0, 0);
+        assert_eq!(events.len(), 2);
+        assert!((events[0].duration - 0.75).abs() < 0.01, "Am should get 0.75, got {}", events[0].duration);
+        assert!((events[1].duration - 0.25).abs() < 0.01, "G should get 0.25, got {}", events[1].duration);
+    }
+
+    #[test]
+    fn test_nested_with_weight() {
+        // "[bd*4]!2" from Blue Monday
+        let events = eval(&parse("[bd*4]!2"), 0.0, 1.0, 0);
+        // [bd*4] = 4 bds in one time slot, !2 = repeat that group twice
+        assert!(events.len() >= 4, "Expected at least 4 events, got {}", events.len());
+    }
+
+    #[test]
+    fn test_complex_drum_pattern() {
+        // "[bd!2 ~ bd]*2" from Big Ship
+        let events = eval(&parse("[bd!2 ~ bd]*2"), 0.0, 1.0, 0);
+        let sounds: Vec<_> = events.iter().filter(|e| !e.is_rest).collect();
+        assert!(sounds.len() >= 4, "Expected 4+ hits, got {}", sounds.len());
+    }
+
+    #[test]
+    fn test_slow_alternation() {
+        // "<Am D F>*2" — cycle through chords, played twice per cycle
+        let node = parse("<Am D F>*2");
+        let e0 = eval(&node, 0.0, 1.0, 0);
+        let e1 = eval(&node, 0.0, 1.0, 1);
+        let e2 = eval(&node, 0.0, 1.0, 2);
+        assert_eq!(e0.len(), 2); // Am played twice
+        assert_eq!(e0[0].value, "Am");
+        assert_eq!(e1[0].value, "D");
+        assert_eq!(e2[0].value, "F");
+    }
+
+    #[test]
+    fn test_alternation_with_brackets() {
+        // "<[sd ~ ~ sd] sd>" — alternate between two patterns
+        let node = parse("<[sd ~ ~ sd] sd>");
+        let e0 = eval(&node, 0.0, 1.0, 0);
+        let e1 = eval(&node, 0.0, 1.0, 1);
+        // Cycle 0: [sd ~ ~ sd] = 4 events (2 sounds, 2 rests)
+        let sounds0: Vec<_> = e0.iter().filter(|e| !e.is_rest).collect();
+        assert_eq!(sounds0.len(), 2, "Expected 2 sd in cycle 0");
+        // Cycle 1: just sd
+        assert_eq!(e1.len(), 1);
+        assert_eq!(e1[0].value, "sd");
+    }
+
+    #[test]
+    fn test_long_weighted_sequence() {
+        // "c#6@2 f5 c6@3 a#5" — weighted melody
+        let events = eval(&parse("c#6@2 f5 c6@3 a#5"), 0.0, 1.0, 0);
+        assert_eq!(events.len(), 4);
+        // Total weight: 2+1+3+1 = 7
+        assert!((events[0].duration - 2.0/7.0).abs() < 0.01);
+        assert!((events[2].duration - 3.0/7.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_note_names_in_mini() {
+        let events = eval(&parse("c4 e4 g4 b4"), 0.0, 1.0, 0);
+        assert_eq!(events.len(), 4);
+        assert_eq!(events[0].value, "c4");
+    }
+
+    #[test]
+    fn test_to_grid_complex() {
+        let grid = to_grid("[bd!2 ~ bd]*2", 16, 0);
+        // Should have multiple bd hits across 16 steps
+        let bd_hits = grid.iter().filter(|(n, _)| n == "bd").count();
+        assert!(bd_hits >= 4, "Expected 4+ bd hits, got {}", bd_hits);
     }
 }
