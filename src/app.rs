@@ -1361,6 +1361,9 @@ impl eframe::App for BeatForge {
                 if ui.button(RichText::new("CHOPS").size(8.0).color(Color32::from_rgb(168, 85, 247))).clicked() {
                     self.load_kit(crate::default_samples::chops_kit());
                 }
+                if ui.button(RichText::new("SYNTH").size(8.0).color(Color32::from_rgb(6, 182, 212))).clicked() {
+                    self.load_kit(crate::default_samples::synth_kit());
+                }
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     if ui.button(RichText::new("LOAD +").size(9.0).color(dim())).clicked() {
                         if let Some(paths) = rfd::FileDialog::new()
@@ -1885,7 +1888,7 @@ impl eframe::App for BeatForge {
             match self.main_view {
                 MainView::Sequencer => self.draw_sequencer(ui, current_step),
                 MainView::PianoRoll => self.draw_piano_roll(ui, current_step),
-                MainView::Code => self.draw_code_editor(ui),
+                MainView::Code => self.draw_code_editor(ui, current_step),
                 MainView::Arrangement => self.draw_arrangement(ui),
             }
         });
@@ -3242,7 +3245,7 @@ impl BeatForge {
         }
     }
 
-    fn draw_code_editor(&mut self, ui: &mut Ui) {
+    fn draw_code_editor(&mut self, ui: &mut Ui, current_step: i32) {
         ui.horizontal(|ui| {
             ui.label(RichText::new("BEATFORGE SCRIPT").size(10.0).color(Color32::from_rgb(168, 85, 247)).family(FontFamily::Monospace));
 
@@ -3255,6 +3258,7 @@ impl BeatForge {
                 ("Boom Bap", include_str!("../songs/boom_bap_soul.bfs")),
                 ("House", include_str!("../songs/house_groove.bfs")),
                 ("Jungle", include_str!("../songs/jungle_breaks.bfs")),
+                ("EDM", include_str!("../songs/edm_supersaw.bfs")),
                 ("Full Demo", include_str!("../songs/full_production.bfs")),
                 ("Tutorial", include_str!("../songs/strudel_showcase.bfs")),
             ];
@@ -3303,6 +3307,28 @@ impl BeatForge {
             .size(8.0).color(muted_color()).family(FontFamily::Monospace));
 
         ui.add_space(4.0);
+
+        // Playback position indicator (Strudel-style)
+        if self.playing && current_step >= 0 {
+            let step = current_step as usize;
+            let total = self.num_steps;
+            let progress = step as f32 / total as f32;
+            let bar = step / 16 + 1;
+            let beat = (step % 16) / 4 + 1;
+            let tick = step % 4 + 1;
+            ui.horizontal(|ui| {
+                // Progress bar
+                let avail = ui.available_width() - 100.0;
+                let (rect, _) = ui.allocate_exact_size(vec2(avail.max(50.0), 6.0), Sense::hover());
+                ui.painter().rect_filled(rect, 3.0, Color32::from_gray(20));
+                let fill_rect = Rect::from_min_size(rect.min, vec2(rect.width() * progress, rect.height()));
+                ui.painter().rect_filled(fill_rect, 3.0, Color32::from_rgb(168, 85, 247));
+                // Position text
+                ui.label(RichText::new(format!("▶ {bar}.{beat}.{tick}  step {}/{total}", step + 1))
+                    .size(10.0).color(Color32::from_rgb(168, 85, 247)).family(FontFamily::Monospace));
+            });
+            ui.add_space(2.0);
+        }
 
         // Code editor
         let prev_text = self.code_text.clone();
@@ -3476,6 +3502,7 @@ impl BeatForge {
                             "808" => self.load_kit(crate::default_samples::default_samples()),
                             "modern" => self.load_kit(crate::default_samples::modern_kit()),
                             "chops" => self.load_kit(crate::default_samples::chops_kit()),
+                            "synth" | "synths" => self.load_kit(crate::default_samples::synth_kit()),
                             _ => {}
                         }
                     }

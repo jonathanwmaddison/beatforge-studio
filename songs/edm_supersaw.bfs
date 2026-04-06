@@ -1,0 +1,66 @@
+# ═══════════════════════════════════════════
+#  "Neon Lights" — EDM / Progressive House
+#  Deadmau5-style supersaw chords + plucks
+# ═══════════════════════════════════════════
+
+bpm 128
+swing 0
+steps 32
+kit 808
+
+# Load synth samples onto pads 10-14
+kit synth
+
+# ── Master ───────────────────────────────
+reverb 0.2
+delay 0.25
+enhancer 0.4
+width 1.3
+
+# ── Drums (4-on-floor) ──────────────────
+kick  "x...x...x...x...x...x...x...x..."
+snare "........x...............x......."
+hh    "..x...x...x...x...x...x...x...x."
+clap  "....x.......x.......x.......x..."
+
+# ── Drum mix ─────────────────────────────
+vol kick 0.85
+vol snare 0.7
+vol hh 0.4
+vol clap 0.65
+pan hh 0.2
+lpf hh 8000
+sidechain kick hh
+
+# ── The supersaw chord (pad 10) ──────────
+# Trigger the SUPERSAW sample on specific steps
+# Use the sequencer grid for pad 10 to place hits
+# pitch each hit differently for chord notes
+
+# ── The pluck melody (pad 11) ────────────
+# Load PLUCK sample, sequence in step grid
+# Each trigger plays the sample at base pitch
+# Use PITCH control to transpose per pattern
+
+# ── The pad (pad 12) ────────────────────
+# LOOP mode on, low volume, full reverb
+# Creates the atmospheric wash behind everything
+
+# ── The bass (pad 13) ───────────────────
+# BASS sample, sidechain to kick
+vol pad13 0.8
+sidechain kick pad13
+
+# ── FX sends ─────────────────────────────
+sendverb clap 0.35
+senddly snare 0.2
+sendverb pad12 0.6
+senddly pad11 0.15
+
+# ── Production tips ──────────────────────
+# 1. The SUPERSAW sample is 7 detuned saws — instant deadmau5
+# 2. Use PITCH on each pad to play different notes
+# 3. Enable LOOP on the PAD sample for sustained chords
+# 4. Sidechain the bass and pad to the kick
+# 5. Master enhancer at 40% glues everything together
+# 6. Width at 1.3 for that wide stereo field

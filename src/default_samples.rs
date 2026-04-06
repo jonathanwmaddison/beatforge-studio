@@ -88,6 +88,18 @@ pub fn chops_kit() -> Vec<DefaultSample> {
     ]
 }
 
+pub fn synth_kit() -> Vec<DefaultSample> {
+    vec![
+        // Pre-rendered high-quality synth sounds (pitched to A4=440Hz)
+        // Load onto pads 10-14, use PITCH control to play different notes
+        DefaultSample { name: "SUPERSAW", data: include_bytes!("../samples/synth_supersaw.wav"), pad_index: 10 },
+        DefaultSample { name: "PLUCK", data: include_bytes!("../samples/synth_pluck.wav"), pad_index: 11 },
+        DefaultSample { name: "PAD", data: include_bytes!("../samples/synth_pad.wav"), pad_index: 12 },
+        DefaultSample { name: "BASS", data: include_bytes!("../samples/synth_bass.wav"), pad_index: 13 },
+        DefaultSample { name: "LEAD", data: include_bytes!("../samples/synth_lead.wav"), pad_index: 14 },
+    ]
+}
+
 /// Decode a WAV from raw bytes into f32 samples + sample rate
 pub fn decode_wav_bytes(data: &[u8]) -> Option<(Vec<f32>, u32)> {
     // Simple WAV parser for 16-bit PCM mono
