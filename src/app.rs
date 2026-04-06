@@ -1902,19 +1902,32 @@ impl eframe::App for BeatForge {
                 .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
                 .show(ctx, |ui| {
                     ui.label(RichText::new("EXPORT TO WAV").size(12.0).strong().color(accent()));
-                    ui.add_space(8.0);
+                    ui.add_space(4.0);
+
+                    // Quick presets
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("PRESET:").size(9.0).color(dim()));
+                        if ui.button(RichText::new("1 Bar").size(9.0)).clicked() { self.export_bars = 1; }
+                        if ui.button(RichText::new("2 Bars").size(9.0)).clicked() { self.export_bars = 2; }
+                        if ui.button(RichText::new("4 Bars").size(9.0)).clicked() { self.export_bars = 4; }
+                        if ui.button(RichText::new("8 Bars").size(9.0)).clicked() { self.export_bars = 8; }
+                    });
 
                     ui.horizontal(|ui| {
-                        ui.label("Bars to export:");
+                        ui.label("Bars:");
                         ui.add(egui::DragValue::new(&mut self.export_bars).range(1..=32).speed(0.1));
                     });
 
                     let total_steps = self.export_bars * self.num_steps;
                     let duration = total_steps as f32 * 60.0 / self.bpm / 4.0;
-                    ui.label(RichText::new(format!("{} steps · {:.1}s at {:.0} BPM", total_steps, duration, self.bpm))
-                        .size(10.0).color(dim()));
 
-                    ui.add_space(8.0);
+                    // Info display
+                    ui.label(RichText::new(format!(
+                        "{} steps · {:.1}s · {:.0} BPM · 32-bit float WAV · {}Hz",
+                        total_steps, duration, self.bpm, self.engine.sample_rate
+                    )).size(9.0).color(dim()).family(FontFamily::Monospace));
+
+                    ui.add_space(4.0);
 
                     if self.exporting {
                         let progress = if self.export_steps_remaining > 0 {
