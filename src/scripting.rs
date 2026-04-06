@@ -556,3 +556,146 @@ mod melody_tests {
         assert_eq!(row[..8], [0, 0, 3, 0, 0, 0, 2, 0]);
     }
 }
+
+// ═══════════════════════════════════════════════════════════
+//  ADVANCED SCRIPT COMMANDS
+// ═══════════════════════════════════════════════════════════
+
+/// Extended commands for full DAW control from code
+#[derive(Clone)]
+pub enum ExtCommand {
+    // Synth control
+    AssignSynth(usize, String),      // pad, preset_name
+    // Sample control
+    LoadKit(String),                  // "808", "modern", "chops"
+    // Effects per pad
+    SetDistortion(usize, f32),       // pad, drive
+    SetBitcrush(usize, f32, f32),    // pad, bits, rate
+    SetChorus(usize, f32),           // pad, mix
+    SetPhaser(usize, f32),           // pad, mix
+    SetReverbSend(usize, f32),       // pad, amount
+    SetDelaySend(usize, f32),        // pad, amount
+    // Sidechain
+    SetSidechain(usize, usize),      // source, target
+    // Master
+    SetEnhancer(f32),
+    SetStereoWidth(f32),
+    SetMasterFilter(f32),
+    // Arrangement
+    SetBank(usize),                   // switch to bank
+    // Export
+    ExportBars(usize),                // bounce N bars
+}
+
+/// Parse extended commands that give full DAW control
+pub fn parse_extended(line: &str) -> Option<ExtCommand> {
+    let parts: Vec<&str> = line.trim().splitn(3, |c: char| c.is_whitespace()).collect();
+    if parts.is_empty() { return None; }
+
+    let cmd = parts[0].to_lowercase();
+    match cmd.as_str() {
+        // Synth preset: synth kick "808 Sub"
+        "synth" | "preset" => {
+            if parts.len() >= 3 {
+                let pad = pad_index(parts[1])?;
+                let preset = parts[2].trim_matches('"').to_string();
+                Some(ExtCommand::AssignSynth(pad, preset))
+            } else { None }
+        }
+
+        // Kit loading: kit 808 / kit modern / kit chops
+        "kit" | "loadkit" => {
+            Some(ExtCommand::LoadKit(parts.get(1).unwrap_or(&"808").to_string()))
+        }
+
+        // Per-pad effects
+        "dist" | "distortion" | "drive" => {
+            if parts.len() >= 3 {
+                let pad = pad_index(parts[1])?;
+                let v: f32 = parts[2].parse().ok()?;
+                Some(ExtCommand::SetDistortion(pad, v.clamp(0.0, 1.0)))
+            } else { None }
+        }
+        "crush" | "bitcrush" => {
+            if parts.len() >= 3 {
+                let pad = pad_index(parts[1])?;
+                let bits: f32 = parts[2].parse().ok()?;
+                Some(ExtCommand::SetBitcrush(pad, bits.clamp(1.0, 16.0), 1.0))
+            } else { None }
+        }
+        "chorus" => {
+            if parts.len() >= 3 {
+                let pad = pad_index(parts[1])?;
+                let v: f32 = parts[2].parse().ok()?;
+                Some(ExtCommand::SetChorus(pad, v.clamp(0.0, 1.0)))
+            } else { None }
+        }
+        "phaser" => {
+            if parts.len() >= 3 {
+                let pad = pad_index(parts[1])?;
+                let v: f32 = parts[2].parse().ok()?;
+                Some(ExtCommand::SetPhaser(pad, v.clamp(0.0, 1.0)))
+            } else { None }
+        }
+
+        // Send levels
+        "send_reverb" | "sendverb" | "srv" => {
+            if parts.len() >= 3 {
+                let pad = pad_index(parts[1])?;
+                let v: f32 = parts[2].parse().ok()?;
+                Some(ExtCommand::SetReverbSend(pad, v.clamp(0.0, 1.0)))
+            } else { None }
+        }
+        "send_delay" | "senddly" | "sdl" => {
+            if parts.len() >= 3 {
+                let pad = pad_index(parts[1])?;
+                let v: f32 = parts[2].parse().ok()?;
+                Some(ExtCommand::SetDelaySend(pad, v.clamp(0.0, 1.0)))
+            } else { None }
+        }
+
+        // Sidechain
+        "sidechain" | "sc" => {
+            if parts.len() >= 3 {
+                let src = pad_index(parts[1])?;
+                let tgt = pad_index(parts[2])?;
+                Some(ExtCommand::SetSidechain(src, tgt))
+            } else { None }
+        }
+
+        // Master
+        "enhancer" | "enhance" | "enh" => {
+            let v: f32 = parts.get(1)?.parse().ok()?;
+            Some(ExtCommand::SetEnhancer(v.clamp(0.0, 1.0)))
+        }
+        "width" | "stereo" => {
+            let v: f32 = parts.get(1)?.parse().ok()?;
+            Some(ExtCommand::SetStereoWidth(v.clamp(0.0, 2.0)))
+        }
+        "master_filter" | "mfilter" | "mlpf" => {
+            let v: f32 = parts.get(1)?.parse().ok()?;
+            Some(ExtCommand::SetMasterFilter(v.clamp(20.0, 20000.0)))
+        }
+
+        // Bank
+        "bank" => {
+            let b: usize = parts.get(1)?.parse::<usize>().ok()?.checked_sub(1)?;
+            Some(ExtCommand::SetBank(b))
+        }
+
+        // Export
+        "export" | "bounce" => {
+            let bars: usize = parts.get(1)?.parse().ok()?;
+            Some(ExtCommand::ExportBars(bars))
+        }
+
+        _ => None,
+    }
+}
+
+/// Process all extended commands in a script, returning them as a list
+pub fn extract_extended_commands(script: &str) -> Vec<ExtCommand> {
+    script.lines()
+        .filter_map(|line| parse_extended(line.trim()))
+        .collect()
+}

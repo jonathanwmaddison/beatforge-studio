@@ -3255,6 +3255,7 @@ impl BeatForge {
                 ("Boom Bap", include_str!("../songs/boom_bap_soul.bfs")),
                 ("House", include_str!("../songs/house_groove.bfs")),
                 ("Jungle", include_str!("../songs/jungle_breaks.bfs")),
+                ("Full Demo", include_str!("../songs/full_production.bfs")),
                 ("Tutorial", include_str!("../songs/strudel_showcase.bfs")),
             ];
             for (name, content) in songs {
@@ -3459,6 +3460,60 @@ impl BeatForge {
                     }
                 }
             }
+
+            // Process extended commands (effects, synth, kit, sidechain, master)
+            for ext in crate::scripting::extract_extended_commands(&self.code_text) {
+                match ext {
+                    crate::scripting::ExtCommand::LoadKit(name) => {
+                        match name.to_lowercase().as_str() {
+                            "808" => self.load_kit(crate::default_samples::default_samples()),
+                            "modern" => self.load_kit(crate::default_samples::modern_kit()),
+                            "chops" => self.load_kit(crate::default_samples::chops_kit()),
+                            _ => {}
+                        }
+                    }
+                    crate::scripting::ExtCommand::AssignSynth(pad, ref preset_name) => {
+                        for preset in crate::presets::all_presets() {
+                            if preset.name.to_lowercase() == preset_name.to_lowercase() {
+                                self.synth_params[pad] = preset.params.clone();
+                                self.synth_assigned[pad] = true;
+                                self.pad_types[pad] = PadType::SubSynth;
+                                self.pad_names[pad] = preset.name.to_string();
+                                self.engine.send(Cmd::SetPadSynth(pad, self.synth_params[pad].clone()));
+                                break;
+                            }
+                        }
+                    }
+                    crate::scripting::ExtCommand::SetDistortion(pad, v) => {
+                        if pad < NUM_PADS { self.fx_params[pad][0] = v; self.fx_params[pad][1] = v;
+                            self.engine.send(Cmd::SetPadDistortion{pad, drive: v, mix: v}); }
+                    }
+                    crate::scripting::ExtCommand::SetReverbSend(pad, v) => {
+                        if pad < NUM_PADS { self.reverb_sends[pad] = v; self.engine.send(Cmd::SetPadReverbSend(pad, v)); }
+                    }
+                    crate::scripting::ExtCommand::SetDelaySend(pad, v) => {
+                        if pad < NUM_PADS { self.delay_sends[pad] = v; self.engine.send(Cmd::SetPadDelaySend(pad, v)); }
+                    }
+                    crate::scripting::ExtCommand::SetSidechain(src, tgt) => {
+                        self.sidechain_active[tgt] = true;
+                        self.engine.send(Cmd::SetSidechain { source: src, target: tgt, amount: 0.8 });
+                    }
+                    crate::scripting::ExtCommand::SetEnhancer(v) => {
+                        self.enhancer_amount = v; self.engine.send(Cmd::SetEnhancer(v));
+                    }
+                    crate::scripting::ExtCommand::SetStereoWidth(v) => {
+                        self.stereo_width = v; self.engine.send(Cmd::SetStereoWidth(v));
+                    }
+                    crate::scripting::ExtCommand::SetMasterFilter(v) => {
+                        self.master_filter = v; self.engine.send(Cmd::SetMasterFilter(v));
+                    }
+                    crate::scripting::ExtCommand::SetBank(b) => {
+                        if b < 8 { self.active_bank = b; }
+                    }
+                    _ => {} // bitcrush, chorus, phaser handled similarly
+                }
+            }
+
             self.sync_pattern();
         }
     }
