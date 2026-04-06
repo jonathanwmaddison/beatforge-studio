@@ -50,6 +50,8 @@ fn pad_index(name: &str) -> Option<usize> {
 pub struct ScriptResult {
     /// Pattern data: [pad][step] = velocity (0-3)
     pub pattern: Vec<Vec<u8>>,
+    /// Melody notes: (midi_note, start_step, duration)
+    pub melody_notes: Vec<(u8, f32, f32)>,
     /// Commands to execute
     pub commands: Vec<ScriptCommand>,
     /// Error messages
@@ -69,6 +71,7 @@ pub enum ScriptCommand {
 pub fn evaluate(script: &str, num_steps: usize) -> ScriptResult {
     let mut result = ScriptResult {
         pattern: vec![vec![0u8; num_steps]; NUM_PADS],
+        melody_notes: Vec::new(),
         commands: Vec::new(),
         errors: Vec::new(),
     };
@@ -124,6 +127,35 @@ fn parse_line(line: &str, num_steps: usize, result: &mut ScriptResult) -> Result
             let hits: usize = eparts[1].parse().map_err(|_| "Invalid hits count")?;
             let steps: usize = eparts[2].parse().map_err(|_| "Invalid steps count")?;
             result.commands.push(ScriptCommand::Euclidean(pad, hits, steps));
+        }
+
+        // Melody notation
+        "note" | "melody" | "notes" => {
+            let notes = parse_melody(arg, num_steps);
+            result.melody_notes.extend(notes);
+        }
+
+        // Pattern transforms
+        "reverse" | "rev" => {
+            if let Some(pad) = pad_index(arg) {
+                reverse_pattern(&mut result.pattern[pad], num_steps);
+            }
+        }
+        "rotate" | "rot" => {
+            let parts: Vec<&str> = arg.split_whitespace().collect();
+            if parts.len() >= 2 {
+                if let (Some(pad), Ok(amount)) = (pad_index(parts[0]), parts[1].parse::<i32>()) {
+                    rotate_pattern(&mut result.pattern[pad], num_steps, amount);
+                }
+            }
+        }
+        "prob" | "probability" => {
+            let parts: Vec<&str> = arg.split_whitespace().collect();
+            if parts.len() >= 2 {
+                if let (Some(pad), Ok(p)) = (pad_index(parts[0]), parts[1].parse::<f32>()) {
+                    apply_probability(&mut result.pattern[pad], num_steps, p, 42);
+                }
+            }
         }
 
         // Mini-notation (quoted string on its own line)
@@ -298,5 +330,169 @@ mod tests {
         let names: Vec<String> = (0..16).map(|i| format!("PAD{}", i)).collect();
         let script = pattern_to_script(&pattern, 16, &names);
         assert!(script.contains("x...x...x...x..."));
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  MELODY NOTATION — write synth melodies as note names
+// ═══════════════════════════════════════════════════════════
+//
+//  note "C4 E4 G4 C5"          # quarter notes
+//  note "C4*2 ~ E4 G4*2 ~ B3"  # with repeats and rests
+//  note "C4.8 E4.4 G4.2"       # with length (steps)
+//
+
+/// Parse a note name like "C4", "F#3", "Bb5" into MIDI note number
+pub fn parse_note_name(name: &str) -> Option<u8> {
+    let name = name.trim();
+    if name.len() < 2 { return None; }
+
+    let chars: Vec<char> = name.chars().collect();
+    let (note_base, idx) = match chars[0].to_uppercase().next()? {
+        'C' => (0, 1),
+        'D' => (2, 1),
+        'E' => (4, 1),
+        'F' => (5, 1),
+        'G' => (7, 1),
+        'A' => (9, 1),
+        'B' => (11, 1),
+        _ => return None,
+    };
+
+    let (semitone_offset, idx) = if idx < chars.len() {
+        match chars[idx] {
+            '#' | '♯' => (1i8, idx + 1),
+            'b' | '♭' => (-1, idx + 1),
+            _ => (0, idx),
+        }
+    } else {
+        (0, idx)
+    };
+
+    // Parse octave number
+    let octave_str: String = chars[idx..].iter().collect();
+    let octave: i8 = octave_str.parse().ok()?;
+
+    let midi = (octave + 1) as i16 * 12 + note_base as i16 + semitone_offset as i16;
+    if midi >= 0 && midi <= 127 {
+        Some(midi as u8)
+    } else {
+        None
+    }
+}
+
+/// Parse a melody line: note "C4 E4 G4 C5"
+/// Returns Vec of (midi_note, start_step, duration)
+pub fn parse_melody(melody_str: &str, num_steps: usize) -> Vec<(u8, f32, f32)> {
+    let inner = melody_str.trim().trim_matches('"');
+    let tokens: Vec<&str> = inner.split_whitespace().collect();
+    if tokens.is_empty() { return Vec::new(); }
+
+    let steps_per_token = num_steps as f32 / tokens.len() as f32;
+    let mut notes = Vec::new();
+
+    for (i, token) in tokens.iter().enumerate() {
+        let step = i as f32 * steps_per_token;
+
+        if *token == "~" || *token == "." || *token == "-" {
+            continue; // rest
+        }
+
+        // Handle note.duration syntax: C4.8 means C4 for 8 steps
+        let (note_str, duration) = if let Some((n, d)) = token.split_once('.') {
+            if let Ok(dur) = d.parse::<f32>() {
+                (n, dur)
+            } else {
+                (*token, steps_per_token)
+            }
+        } else {
+            (*token, steps_per_token)
+        };
+
+        // Handle repeat: C4*2
+        if let Some((n, rep_str)) = note_str.split_once('*') {
+            if let (Some(midi), Ok(reps)) = (parse_note_name(n), rep_str.parse::<usize>()) {
+                let sub_step = steps_per_token / reps as f32;
+                for r in 0..reps {
+                    notes.push((midi, step + r as f32 * sub_step, sub_step * 0.9));
+                }
+            }
+        } else if let Some(midi) = parse_note_name(note_str) {
+            notes.push((midi, step, duration * 0.9));
+        }
+    }
+
+    notes
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PATTERN TRANSFORMS
+// ═══════════════════════════════════════════════════════════
+
+/// Reverse a pattern row
+pub fn reverse_pattern(row: &mut Vec<u8>, num_steps: usize) {
+    let slice = &mut row[..num_steps];
+    slice.reverse();
+}
+
+/// Rotate a pattern row by N steps
+pub fn rotate_pattern(row: &mut Vec<u8>, num_steps: usize, amount: i32) {
+    let n = num_steps;
+    if n == 0 { return; }
+    let shift = ((amount % n as i32) + n as i32) as usize % n;
+    let mut temp = row[..n].to_vec();
+    for i in 0..n {
+        row[i] = temp[(i + n - shift) % n];
+    }
+}
+
+/// Apply probability: randomly remove hits with given chance (0.0 = remove all, 1.0 = keep all)
+pub fn apply_probability(row: &mut Vec<u8>, num_steps: usize, prob: f32, seed: u32) {
+    let mut rng = seed;
+    for i in 0..num_steps {
+        if row[i] > 0 {
+            rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
+            if (rng % 100) as f32 / 100.0 > prob {
+                row[i] = 0;
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod melody_tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_note_name() {
+        assert_eq!(parse_note_name("C4"), Some(60));
+        assert_eq!(parse_note_name("A4"), Some(69));
+        assert_eq!(parse_note_name("C#4"), Some(61));
+        assert_eq!(parse_note_name("Bb3"), Some(58));
+        assert_eq!(parse_note_name("C0"), Some(12));
+    }
+
+    #[test]
+    fn test_parse_melody() {
+        let notes = parse_melody("C4 E4 G4 C5", 16);
+        assert_eq!(notes.len(), 4);
+        assert_eq!(notes[0].0, 60); // C4
+        assert_eq!(notes[1].0, 64); // E4
+        assert_eq!(notes[2].0, 67); // G4
+        assert_eq!(notes[3].0, 72); // C5
+    }
+
+    #[test]
+    fn test_reverse_pattern() {
+        let mut row = vec![3, 0, 0, 0, 2, 0, 0, 0];
+        reverse_pattern(&mut row, 8);
+        assert_eq!(row[..8], [0, 0, 0, 2, 0, 0, 0, 3]);
+    }
+
+    #[test]
+    fn test_rotate_pattern() {
+        let mut row = vec![3, 0, 0, 0, 2, 0, 0, 0];
+        rotate_pattern(&mut row, 8, 2);
+        assert_eq!(row[..8], [0, 0, 3, 0, 0, 0, 2, 0]);
     }
 }

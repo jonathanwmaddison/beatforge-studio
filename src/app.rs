@@ -3314,6 +3314,27 @@ impl BeatForge {
 
         if result.errors.is_empty() {
             self.push_undo();
+
+            // Apply melody notes to piano roll (on selected synth pad)
+            if !result.melody_notes.is_empty() {
+                let sp = self.selected_pad;
+                if !self.synth_assigned[sp] {
+                    // Auto-assign synth if not already
+                    self.synth_assigned[sp] = true;
+                    self.pad_types[sp] = PadType::SubSynth;
+                    self.pad_names[sp] = format!("SYNTH {}", sp + 1);
+                    self.engine.send(Cmd::SetPadSynth(sp, self.synth_params[sp].clone()));
+                }
+                self.note_patterns[sp].notes.clear();
+                for &(note, start, dur) in &result.melody_notes {
+                    self.note_patterns[sp].add_note(note, start, dur, 0.8);
+                }
+                self.engine.send(Cmd::SetNotePattern {
+                    pad: sp,
+                    pattern: self.note_patterns[sp].clone(),
+                });
+            }
+
             // Apply pattern
             for (i, row) in result.pattern.iter().enumerate() {
                 if i < NUM_PADS {
