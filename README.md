@@ -2,7 +2,7 @@
 
 A native desktop beatmaking DAW built entirely in Rust. No Electron, no web tech — pure native performance.
 
-**9,200+ lines of Rust · 13 modules · 6.6MB binary · Zero dependencies on Node/Electron/web**
+**10,700+ lines of Rust · 15 modules · 6.6MB binary · Zero dependencies on Node/Electron/web**
 
 ## Features
 
