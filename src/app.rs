@@ -347,6 +347,9 @@ pub struct BeatForge {
     // Pattern template library
     template_lib: TemplateLibrary,
 
+    // MIDI activity display
+    last_midi_note: Option<(u8, f64)>, // (note, time)
+
     // Pad context menu
     pad_context_menu: Option<(usize, Pos2)>,
 
@@ -435,6 +438,7 @@ impl BeatForge {
             mic: MicRecorder::new(),
             mic_recording_for_pad: None,
             template_lib: TemplateLibrary::new(),
+            last_midi_note: None,
             pad_context_menu: None,
             show_channel_settings: None,
             project_name: "Untitled".to_string(),
@@ -875,6 +879,7 @@ impl eframe::App for BeatForge {
         while let Ok(evt) = self.midi_rx.try_recv() {
             match evt {
                 MidiEvent::NoteOn { note, velocity, .. } => {
+                    self.last_midi_note = Some((note, ctx.input(|i| i.time)));
                     let vel_f = apply_velocity_curve(velocity as f32 / 127.0, self.velocity_curve);
                     let piano_mode = self.main_view == MainView::PianoRoll
                         && self.synth_assigned[self.selected_pad];
@@ -2269,9 +2274,21 @@ impl eframe::App for BeatForge {
                         .background_color(red()));
                     ui.label(RichText::new("·").size(9.0).color(muted_color()));
                 }
-                // MIDI indicator
+                // MIDI indicator + last note
                 if self.midi_connected.load(Ordering::Relaxed) {
-                    ui.label(RichText::new("MIDI ●").size(8.0).color(green()).family(FontFamily::Monospace));
+                    let note_names = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+                    if let Some((note, t)) = self.last_midi_note {
+                        let now = ctx.input(|i| i.time);
+                        if now - t < 1.0 {
+                            let name = note_names[(note % 12) as usize];
+                            let oct = note / 12;
+                            ui.label(RichText::new(format!("MIDI {name}{oct}")).size(8.0).color(accent()).family(FontFamily::Monospace));
+                        } else {
+                            ui.label(RichText::new("MIDI ●").size(8.0).color(green()).family(FontFamily::Monospace));
+                        }
+                    } else {
+                        ui.label(RichText::new("MIDI ●").size(8.0).color(green()).family(FontFamily::Monospace));
+                    }
                     ui.label(RichText::new("·").size(9.0).color(muted_color()));
                 }
                 ui.label(RichText::new(format!(
@@ -2399,6 +2416,21 @@ impl BeatForge {
             );
             let rect = response.rect;
             let grid_left = rect.left() + label_w;
+
+            // Swing visualization (small offset indicators on odd steps)
+            if self.swing > 1.0 {
+                for step in 0..num_steps {
+                    if step % 2 == 1 { // odd steps are swung
+                        let x = grid_left + step as f32 * cell_w + cell_w / 2.0;
+                        let offset = self.swing / 200.0 * cell_w * 0.4;
+                        painter.circle_filled(
+                            pos2(x + offset, rect.top() + 2.0),
+                            1.5,
+                            Color32::from_rgba_premultiplied(245, 158, 11, 60),
+                        );
+                    }
+                }
+            }
 
             // Step numbers with bar markers
             for step in 0..num_steps {
