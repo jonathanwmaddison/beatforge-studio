@@ -697,3 +697,26 @@ mod tests {
         assert!(!major.contains(&(cs % 12)));
     }
 }
+
+/// Morph between waveforms: 0.0=sine, 0.33=triangle, 0.66=saw, 1.0=square
+/// Allows continuous waveform blending with a single parameter
+pub fn morph_oscillate(phase: f64, morph: f64) -> f64 {
+    let two_pi: f64 = 2.0 * std::f64::consts::PI;
+    let sine = (phase * two_pi).sin();
+    let tri = if phase < 0.25 { phase * 4.0 }
+        else if phase < 0.75 { 2.0 - phase * 4.0 }
+        else { phase * 4.0 - 4.0 };
+    let saw = 2.0 * phase - 1.0;
+    let square = if phase < 0.5 { 1.0 } else { -1.0 };
+
+    if morph <= 0.33 {
+        let t = morph / 0.33;
+        sine * (1.0 - t) + tri * t
+    } else if morph <= 0.66 {
+        let t = (morph - 0.33) / 0.33;
+        tri * (1.0 - t) + saw * t
+    } else {
+        let t = (morph - 0.66) / 0.34;
+        saw * (1.0 - t) + square * t
+    }
+}
