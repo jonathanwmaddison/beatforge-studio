@@ -369,11 +369,12 @@ pub fn pattern_to_script(pattern: &[Vec<u8>], num_steps: usize, pad_names: &[Str
     let mut lines = Vec::new();
 
     for (i, row) in pattern.iter().enumerate() {
-        let has_hits = row[..num_steps].iter().any(|&v| v > 0);
+        let steps = num_steps.min(row.len());
+        let has_hits = row[..steps].iter().any(|&v| v > 0);
         if !has_hits { continue; }
 
         let name = pad_names.get(i).map(|s| s.to_lowercase()).unwrap_or(format!("pad{}", i));
-        let pat: String = row[..num_steps].iter().map(|&v| match v {
+        let pat: String = row[..steps].iter().map(|&v| match v {
             3 => 'x',
             2 => 'o',
             1 => '+',
@@ -383,7 +384,11 @@ pub fn pattern_to_script(pattern: &[Vec<u8>], num_steps: usize, pad_names: &[Str
         lines.push(format!("{:<8} \"{}\"", name, pat));
     }
 
-    lines.join("\n")
+    if lines.is_empty() {
+        "# Empty pattern — click cells in the SEQUENCER to add hits".to_string()
+    } else {
+        lines.join("\n")
+    }
 }
 
 #[cfg(test)]

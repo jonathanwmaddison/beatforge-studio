@@ -1888,7 +1888,7 @@ impl eframe::App for BeatForge {
             match self.main_view {
                 MainView::Sequencer => self.draw_sequencer(ui, current_step),
                 MainView::PianoRoll => self.draw_piano_roll(ui, current_step),
-                MainView::Code => self.draw_code_editor(ui, current_step),
+                MainView::Code => { if self.code_text.is_empty() { self.code_text = format!("# Auto-generated\nbpm {:.0}\nswing {:.0}\nsteps {}\n\n{}", self.bpm, self.swing, self.num_steps, crate::scripting::pattern_to_script(&self.banks[self.active_bank], self.num_steps, &self.pad_names)); } self.draw_code_editor(ui, current_step); }
                 MainView::Arrangement => self.draw_arrangement(ui),
             }
         });
