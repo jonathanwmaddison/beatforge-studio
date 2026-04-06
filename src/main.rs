@@ -18,6 +18,7 @@ mod default_samples;
 mod scripting;
 mod pattern;
 mod mini;
+mod theory;
 
 use eframe::egui;
 

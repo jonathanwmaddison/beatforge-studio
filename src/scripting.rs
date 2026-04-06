@@ -73,6 +73,7 @@ pub enum ScriptCommand {
     SetPadFilter(usize, f32),
     SetSteps(usize),
     SetBank(usize),
+    SetScale(i32, Vec<i32>), // root MIDI note, scale intervals
 }
 
 /// Parse and evaluate a BeatForge Script
@@ -203,6 +204,55 @@ fn parse_line(line: &str, num_steps: usize, result: &mut ScriptResult) -> Result
         "note" | "melody" | "notes" => {
             let notes = parse_melody(arg, result.effective_steps);
             result.melody_notes.extend(notes);
+        }
+
+        // Chord command: chord "Am Dm G C" → generates chord notes at each step
+        "chord" | "chords" | "progression" => {
+            let prog = crate::theory::parse_progression(arg.trim_matches('"'));
+            let steps = result.effective_steps;
+            let steps_per_chord = steps / prog.len().max(1);
+            for (i, chord_notes) in prog.iter().enumerate() {
+                let step = i * steps_per_chord;
+                for &note in chord_notes {
+                    if note >= 0 && note <= 127 {
+                        result.melody_notes.push((note as u8, step as f32, steps_per_chord as f32 * 0.9));
+                    }
+                }
+            }
+        }
+
+        // Scale command: scale C minor → sets scale context for degree-based notes
+        // Usage: scale C minor then use degree numbers: "0 2 4 7" maps to scale
+        "scale" => {
+            let parts: Vec<&str> = arg.split_whitespace().collect();
+            if parts.len() >= 2 {
+                let root = crate::theory::note_to_semitone(parts[0]).unwrap_or(60);
+                if let Some(scale) = crate::theory::get_scale(parts[1]) {
+                    result.commands.push(ScriptCommand::SetScale(root, scale));
+                }
+            }
+        }
+
+        // Degree-based notes: deg "0 2 4 7 4 2 0" (uses current scale)
+        "deg" | "degree" | "degrees" => {
+            let inner = arg.trim_matches('"');
+            let steps = result.effective_steps;
+            let tokens: Vec<&str> = inner.split_whitespace().collect();
+            let steps_per = steps / tokens.len().max(1);
+            // Use last scale command or default to C major
+            let (root, scale) = result.commands.iter().rev().find_map(|cmd| {
+                if let ScriptCommand::SetScale(r, s) = cmd { Some((*r, s.clone())) } else { None }
+            }).unwrap_or((60, vec![0, 2, 4, 5, 7, 9, 11]));
+
+            for (i, token) in tokens.iter().enumerate() {
+                if *token == "~" || *token == "-" { continue; }
+                if let Ok(degree) = token.parse::<i32>() {
+                    let midi = crate::theory::scale_degree_to_midi(degree, root, &scale);
+                    if midi >= 0 && midi <= 127 {
+                        result.melody_notes.push((midi as u8, (i * steps_per) as f32, steps_per as f32 * 0.9));
+                    }
+                }
+            }
         }
 
         // Pattern transforms

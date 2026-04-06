@@ -3556,6 +3556,9 @@ impl BeatForge {
                     crate::scripting::ScriptCommand::SetBank(b) => {
                         if *b < 8 { self.active_bank = *b; }
                     }
+                    crate::scripting::ScriptCommand::SetScale(_, _) => {
+                        // Scale is handled internally by the script evaluator
+                    }
                 }
             }
 
