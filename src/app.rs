@@ -1,4 +1,5 @@
 use crate::audio::{self, Cmd, Engine, GrossBeatMode, NUM_PADS, MAX_STEPS};
+use crate::mic::MicRecorder;
 use crate::midi::{MidiManager, MidiEvent, midi_note_to_pad};
 use crate::synth::{SynthParams, Waveform, FilterType, LfoTarget, NotePattern};
 use crate::slicer;
@@ -339,6 +340,10 @@ pub struct BeatForge {
     browser_files: Vec<(String, std::path::PathBuf, bool)>, // (name, path, is_dir)
     browser_open: bool,
 
+    // Mic recording
+    mic: MicRecorder,
+    mic_recording_for_pad: Option<usize>,
+
     // Pad context menu
     pad_context_menu: Option<(usize, Pos2)>, // (pad_idx, position)
 
@@ -424,6 +429,8 @@ impl BeatForge {
             browser_path: dirs_home().join("Desktop"),
             browser_files: Vec::new(),
             browser_open: false,
+            mic: MicRecorder::new(),
+            mic_recording_for_pad: None,
             pad_context_menu: None,
             show_channel_settings: None,
             project_name: "Untitled".to_string(),
@@ -3332,6 +3339,36 @@ impl BeatForge {
                             .pick_file()
                         {
                             self.load_sample_file(sp, &path);
+                        }
+                    }
+                    // Mic record to pad
+                    if self.mic.available {
+                        if let Some(target_pad) = self.mic_recording_for_pad {
+                            // Currently recording
+                            let dur = self.mic.duration();
+                            if ui.add(Button::new(RichText::new(format!("■ STOP ({:.1}s)", dur)).size(8.0)
+                                .color(Color32::BLACK)).fill(red())).clicked() {
+                                let data = self.mic.stop();
+                                if !data.is_empty() {
+                                    let sr = self.mic.sample_rate;
+                                    let peaks = audio::compute_peaks(&data, 200);
+                                    self.pad_peaks[target_pad] = Some(peaks);
+                                    self.pad_names[target_pad] = "MIC REC".to_string();
+                                    self.pad_types[target_pad] = PadType::Sample;
+                                    self.sample_info = Some(format!("{:.2}s · {}Hz · {} samples", data.len() as f32 / sr as f32, sr, data.len()));
+                                    self.engine.send(Cmd::LoadSample {
+                                        pad: target_pad,
+                                        data: std::sync::Arc::new(data),
+                                        original_sr: sr,
+                                    });
+                                }
+                                self.mic_recording_for_pad = None;
+                            }
+                        } else {
+                            if ui.button(RichText::new("🎤 REC").size(8.0).color(red())).clicked() {
+                                self.mic_recording_for_pad = Some(sp);
+                                self.mic.start();
+                            }
                         }
                     }
                     // Normalize (boost to peak)

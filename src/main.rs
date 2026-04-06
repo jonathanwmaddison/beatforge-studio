@@ -12,6 +12,7 @@ mod eq;
 mod analyzer;
 mod midi;
 mod fx;
+mod mic;
 
 use eframe::egui;
 
