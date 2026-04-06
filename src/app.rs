@@ -3246,6 +3246,25 @@ impl BeatForge {
         ui.horizontal(|ui| {
             ui.label(RichText::new("BEATFORGE SCRIPT").size(10.0).color(Color32::from_rgb(168, 85, 247)).family(FontFamily::Monospace));
 
+            // Demo songs dropdown
+            ui.separator();
+            ui.label(RichText::new("SONGS:").size(8.0).color(dim()));
+            let songs = [
+                ("Lo-Fi", include_str!("../songs/lofi_chill.bfs")),
+                ("Trap", include_str!("../songs/trap_banger.bfs")),
+                ("Boom Bap", include_str!("../songs/boom_bap_soul.bfs")),
+                ("House", include_str!("../songs/house_groove.bfs")),
+                ("Jungle", include_str!("../songs/jungle_breaks.bfs")),
+                ("Tutorial", include_str!("../songs/strudel_showcase.bfs")),
+            ];
+            for (name, content) in songs {
+                if ui.add(Button::new(RichText::new(name).size(7.0).color(dim()))
+                    .min_size(vec2(36.0, 14.0))).clicked() {
+                    self.code_text = content.to_string();
+                    self.apply_code_to_grid();
+                }
+            }
+
             // Sync buttons
             if ui.add(Button::new(RichText::new("GRID → CODE").size(8.0).color(dim()))).clicked() {
                 // Convert current grid pattern to code

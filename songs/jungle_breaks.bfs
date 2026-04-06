@@ -1,0 +1,62 @@
+# ═══════════════════════════════════════════
+#  "Concrete Jungle" — Jungle / Drum & Bass
+#  BeatForge Script Demo Song
+# ═══════════════════════════════════════════
+
+bpm 170
+swing 5
+reverb 0.2
+delay 0.3
+
+# ── Breakbeat (chopped amen) ─────────────
+# Load CHOPS kit first!
+# Program amen slices as a breakbeat:
+
+# Classic amen chop pattern:
+# Pad 0 (amen1): kick hits
+# Pad 1 (amen2): snare hits
+# Pad 2 (amen3): ghost notes
+# Pad 3-7: fills and variations
+
+# Main break (Bank A):
+kick  "x..x....x..x..x."
+snare "....x..+....x..."
+hh    "x.x.x.x.x.x.x.x."
+oh    ".......x........"
+
+# Double-time break (Bank B):
+# kick  "x.x.x...x.x.x.x."
+# snare "..x...x...x...x."
+# hh    "xxxxxxxxxxxxxxxx"
+
+# ── Strudel pattern version ──────────────
+# s("kick [snare kick] hh*8 snare").fast(2)
+# s("kick(3,8) , snare(2,8) , hh*16")
+
+# ── Sub bass (heavy reese) ──────────────
+# Assign synth, use "Reese Bass" preset
+note "C1.8 ~ ~ ~ ~ ~ ~ ~ C1.4 ~ Eb1.4 ~ F1.8 ~ ~ ~"
+
+# ── Pad (atmospheric) ────────────────────
+# Use "Dark Pad" preset, long notes
+# C minor chord sustained over 16 steps
+
+# ── Euclidean fills ──────────────────────
+euclidean perc 7 16
+euclidean rim 5 16
+
+# ── Song structure ───────────────────────
+# Bank A: intro — filtered break, building (4 bars)
+# Bank B: verse — full speed break + bass (8 bars)
+# Bank C: drop — double-time break + bass slides (8 bars)
+# Bank D: breakdown — half-time, just pad + sub (4 bars)
+# Bank E: second drop — even more intense (8 bars)
+# Bank F: outro — break slowing down (4 bars)
+
+# ── Mix ──────────────────────────────────
+# This is ALL about the drums
+# Breaks: front and center, slight distortion (10%)
+# Sub bass: sidechain to kick, heavy
+# Pad: way back in the mix, reverb 50%
+# Everything: master enhancer 35% for that compressed jungle sound
+# Delay: tempo-synced 1/8, feedback high for dubby echoes

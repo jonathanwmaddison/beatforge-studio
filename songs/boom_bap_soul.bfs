@@ -1,0 +1,51 @@
+# ═══════════════════════════════════════════
+#  "Soul Brother" — Boom Bap / Sample Chop
+#  BeatForge Script Demo Song
+# ═══════════════════════════════════════════
+
+bpm 92
+swing 45
+reverb 0.25
+delay 0.15
+
+# ── Drums (classic boom bap) ─────────────
+kick  "x......ox..x...."
+snare "....x.......x..."
+hh    "x.x.x.x.x.x.x.x."
+oh    "..............x."
+rim   "..x...........x."
+
+# ── Chopped samples ──────────────────────
+# Load CHOPS kit (click CHOPS button)
+# Amen break chops for fills:
+# Use pads 0-7 for amen slices
+# Program fills in Bank D:
+# amen1 "x...x..x.x..x..x"
+# amen3 "..x...x...x...x."
+
+# ── Bass line (Fender-style) ─────────────
+note "C2.2 C2.2 ~ ~ Eb2.2 Eb2.2 ~ ~ F2.2 ~ G2.2 ~ Ab2.4 ~ ~ ~"
+
+# ── Soul chords (use Warm Pad preset) ────
+# Assign synth on pad 14, select "Warm Pad"
+# Piano roll chords (use CHORD stamp tool):
+# Step 1: Cm7  (C Eb G Bb)
+# Step 5: Fm7  (F Ab C Eb)
+# Step 9: Gm7  (G Bb D F)
+# Step 13: Fm7 (F Ab C Eb)
+
+# ── Arrangement (classic hip hop) ────────
+# Bank A: 4 bars — drums only (establish groove)
+# Bank B: 4 bars — add bass + sample chops
+# Bank C: 4 bars — add chords (full arrangement)
+# Bank D: 2 bars — breakdown (just bass + hats)
+# Bank E: 4 bars — back to full + fills
+# Bank F: 2 bars — outro (fade drums, keep chords)
+
+# ── Mix philosophy ───────────────────────
+# This is a sample-based beat — the samples ARE the song
+# Keep it dusty: master enhancer 25%, slight bitcrush on drums
+# Vinyl crackle: load a noise sample, set very low volume
+# Bass: sidechain to kick, that's the bounce
+# Chords: reverb 40%, delay 20% (dreamy)
+# Everything through tape saturation (already on master)

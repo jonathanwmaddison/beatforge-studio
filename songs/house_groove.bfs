@@ -1,0 +1,53 @@
+# ═══════════════════════════════════════════
+#  "Midnight Groove" — Deep House
+#  BeatForge Script Demo Song
+# ═══════════════════════════════════════════
+
+bpm 124
+swing 15
+reverb 0.3
+delay 0.25
+
+# ── Drums (4-on-floor bounce) ────────────
+kick  "x...x...x...x..."
+snare "........x......."
+hh    "..x...x...x...x."
+oh    "......x.......x."
+clap  "....x.......x..."
+rim   "x.......x......."
+perc  "..x..x....x..x.."
+
+# ── Strudel-style alternative ────────────
+# s("kick*4").fast(1)
+# s("hh*8").degrade(0.7)
+# s("clap").slow(2)
+
+# ── Bass (rolling, filtered) ────────────
+note "C2.2 C2.2 G2.2 G2.2 Ab2.2 Ab2.2 Eb2.2 Eb2.2 F2.2 F2.2 C2.2 C2.2 G2.2 G2.2 ~ ~"
+
+# ── Chord stabs (use Stab preset) ───────
+# Assign synth, select preset, enter chords:
+# Cm at step 3, Fm at step 7, Gm at step 11, Cm at step 15
+# Use note length 2 for short stabs
+
+# ── Pad (use Dark Pad preset) ───────────
+# Long sustained chord: Cm (C Eb G) for 16 steps
+# Set attack to 2s, release to 3s for slow swell
+# Reverb send 60%, delay send 30%
+
+# ── Song structure ───────────────────────
+# Bank A: intro — kick + hats only (8 bars)
+# Bank B: build — add bass + perc (8 bars)
+# Bank C: main — full groove (16 bars)
+# Bank D: break — remove kick, filter sweep (4 bars)
+# Bank E: drop — everything back + pad (8 bars)
+# Bank F: outro — filter down, fade drums (4 bars)
+
+# ── Mix ──────────────────────────────────
+# Key: 4-on-floor kick needs to HIT
+# Kick: no sidechain needed (it IS the sidechain source)
+# Bass: sidechain to kick, filter at 800Hz
+# Hats: pan slightly left, reverb 15%
+# Clap: big reverb (40%), slight delay
+# Pad: full stereo width, buried in reverb (60%)
+# Master: enhancer 20%, keep it clean
