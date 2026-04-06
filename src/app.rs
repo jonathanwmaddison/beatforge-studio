@@ -1349,6 +1349,9 @@ impl eframe::App for BeatForge {
                 if ui.button(RichText::new("MODERN").size(8.0).color(dim())).clicked() {
                     self.load_kit(crate::default_samples::modern_kit());
                 }
+                if ui.button(RichText::new("CHOPS").size(8.0).color(Color32::from_rgb(168, 85, 247))).clicked() {
+                    self.load_kit(crate::default_samples::chops_kit());
+                }
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     if ui.button(RichText::new("LOAD +").size(9.0).color(dim())).clicked() {
                         if let Some(paths) = rfd::FileDialog::new()

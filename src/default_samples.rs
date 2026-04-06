@@ -67,6 +67,27 @@ pub fn modern_kit() -> Vec<DefaultSample> {
     ]
 }
 
+pub fn chops_kit() -> Vec<DefaultSample> {
+    vec![
+        // Amen break slices (the most sampled break in music history)
+        DefaultSample { name: "AMEN 1", data: include_bytes!("../samples/chops/amen_01.wav"), pad_index: 0 },
+        DefaultSample { name: "AMEN 2", data: include_bytes!("../samples/chops/amen_02.wav"), pad_index: 1 },
+        DefaultSample { name: "AMEN 3", data: include_bytes!("../samples/chops/amen_03.wav"), pad_index: 2 },
+        DefaultSample { name: "AMEN 4", data: include_bytes!("../samples/chops/amen_04.wav"), pad_index: 3 },
+        DefaultSample { name: "AMEN 5", data: include_bytes!("../samples/chops/amen_05.wav"), pad_index: 4 },
+        DefaultSample { name: "AMEN 6", data: include_bytes!("../samples/chops/amen_06.wav"), pad_index: 5 },
+        DefaultSample { name: "AMEN 7", data: include_bytes!("../samples/chops/amen_07.wav"), pad_index: 6 },
+        DefaultSample { name: "AMEN 8", data: include_bytes!("../samples/chops/amen_08.wav"), pad_index: 7 },
+        // Stabs and bass
+        DefaultSample { name: "STAB 1", data: include_bytes!("../samples/chops/stab_01.wav"), pad_index: 8 },
+        DefaultSample { name: "STAB 2", data: include_bytes!("../samples/chops/stab_02.wav"), pad_index: 9 },
+        DefaultSample { name: "BASS 1", data: include_bytes!("../samples/chops/bass_01.wav"), pad_index: 10 },
+        DefaultSample { name: "BASS 2", data: include_bytes!("../samples/chops/bass_02.wav"), pad_index: 11 },
+        // Pad (for lo-fi chopping)
+        DefaultSample { name: "PAD", data: include_bytes!("../samples/chops/pad_angel.wav"), pad_index: 12 },
+    ]
+}
+
 /// Decode a WAV from raw bytes into f32 samples + sample rate
 pub fn decode_wav_bytes(data: &[u8]) -> Option<(Vec<f32>, u32)> {
     // Simple WAV parser for 16-bit PCM mono
