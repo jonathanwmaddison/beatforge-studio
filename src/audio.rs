@@ -1956,19 +1956,33 @@ struct Delay {
     delay_samples: usize,
     feedback: f32,
     sr: f64,
+    // Feedback filter: each repeat gets darker (dub delay character)
+    fb_filter_l: f64,
+    fb_filter_r: f64,
+    fb_filter_coeff: f64, // low-pass cutoff coefficient
+    // Stereo: slight L/R offset for width
+    stereo_offset: usize,
 }
 
 impl Delay {
     fn new(sr: f64, time: f64) -> Self {
-        let max_samples = (sr * 2.0) as usize; // 2 seconds max
+        let max_samples = (sr * 2.0) as usize;
         let delay = (sr * time) as usize;
+        // Feedback filter at ~4kHz — each repeat loses high end
+        let fb_filter_coeff = TWO_PI * 4000.0 / sr;
+        // Stereo offset: ~15ms difference between L and R for ping-pong feel
+        let stereo_offset = (sr * 0.015) as usize;
         Delay {
             buffer_l: vec![0.0; max_samples],
             buffer_r: vec![0.0; max_samples],
             write_pos: 0,
             delay_samples: delay.min(max_samples - 1),
-            feedback: 0.35,
+            feedback: 0.4,
             sr,
+            fb_filter_l: 0.0,
+            fb_filter_r: 0.0,
+            fb_filter_coeff,
+            stereo_offset,
         }
     }
 
@@ -1978,12 +1992,22 @@ impl Delay {
 
     fn process(&mut self, left: f32, right: f32) -> (f32, f32) {
         let len = self.buffer_l.len();
-        let read_pos = (self.write_pos + len - self.delay_samples) % len;
-        let out_l = self.buffer_l[read_pos];
-        let out_r = self.buffer_r[read_pos];
+        let read_pos_l = (self.write_pos + len - self.delay_samples) % len;
+        let read_pos_r = (self.write_pos + len - self.delay_samples - self.stereo_offset) % len;
+        let out_l = self.buffer_l[read_pos_l];
+        let out_r = self.buffer_r[read_pos_r];
 
-        self.buffer_l[self.write_pos] = left + out_l * self.feedback;
-        self.buffer_r[self.write_pos] = right + out_r * self.feedback;
+        // Low-pass filter on feedback (each repeat gets darker)
+        self.fb_filter_l += self.fb_filter_coeff * (out_l as f64 - self.fb_filter_l);
+        self.fb_filter_r += self.fb_filter_coeff * (out_r as f64 - self.fb_filter_r);
+
+        // Soft-clip feedback to prevent runaway
+        let fb_l = (self.fb_filter_l as f32 * self.feedback).tanh();
+        let fb_r = (self.fb_filter_r as f32 * self.feedback).tanh();
+
+        // Cross-feed for subtle ping-pong: L gets some R and vice versa
+        self.buffer_l[self.write_pos] = left + fb_l * 0.8 + fb_r * 0.2;
+        self.buffer_r[self.write_pos] = right + fb_r * 0.8 + fb_l * 0.2;
 
         self.write_pos = (self.write_pos + 1) % len;
         (out_l, out_r)
