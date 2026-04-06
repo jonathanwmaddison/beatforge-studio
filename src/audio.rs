@@ -1408,43 +1408,72 @@ struct SnareOsc {
     body_phase: f64,
     body_env: f64,
     noise_env: f64,
+    snap_env: f64,       // initial transient snap
     body_decay: f64,
     noise_decay: f64,
+    snap_decay: f64,
     noise_state: u32,
+    // Noise bandpass filter (keeps snare "wire" character ~2-8kHz)
+    bp_lp: f64,          // low-pass state
+    bp_hp_prev_in: f64,  // high-pass state
+    bp_hp_prev_out: f64,
+    bp_hp_coeff: f64,
 }
 
 impl SnareOsc {
     fn new(sr: f64) -> Self {
+        let bp_hp_coeff = 1.0 / (1.0 + TWO_PI * 2000.0 / sr);
         SnareOsc {
             body_phase: 0.0,
             body_env: 0.0,
             noise_env: 0.0,
-            body_decay: (-1.0 / (sr * 0.08)).exp(),
-            noise_decay: (-1.0 / (sr * 0.12)).exp(),
+            snap_env: 0.0,
+            body_decay: (-1.0 / (sr * 0.1)).exp(),
+            noise_decay: (-1.0 / (sr * 0.15)).exp(),
+            snap_decay: (-1.0 / (sr * 0.005)).exp(),  // 5ms snap
             noise_state: 12345,
+            bp_lp: 0.0,
+            bp_hp_prev_in: 0.0,
+            bp_hp_prev_out: 0.0,
+            bp_hp_coeff,
         }
     }
 
     fn trigger(&mut self, vel: f32) {
         self.body_phase = 0.0;
-        self.body_env = vel as f64 * 0.6;
-        self.noise_env = vel as f64;
+        self.body_env = vel as f64 * 0.7;
+        self.noise_env = vel as f64 * 0.9;
+        self.snap_env = vel as f64;  // initial transient
     }
 
     fn tick(&mut self, sr: f64) -> f32 {
-        if self.body_env < 0.001 && self.noise_env < 0.001 {
+        if self.body_env < 0.001 && self.noise_env < 0.001 && self.snap_env < 0.001 {
             return 0.0;
         }
-        // Body (sine at ~200Hz)
-        self.body_phase += 200.0 / sr;
+
+        // Body: pitched sine with slight pitch drop for punch
+        let pitch_drop = 1.0 + self.snap_env * 0.5; // starts slightly higher
+        self.body_phase += (185.0 * pitch_drop) / sr;
         let body = (self.body_phase * TWO_PI).sin() * self.body_env;
         self.body_env *= self.body_decay;
 
-        // Noise
-        let noise = white_noise(&mut self.noise_state) as f64 * self.noise_env * 0.7;
+        // Snare wires: bandpassed noise (2kHz-8kHz)
+        let raw_noise = white_noise(&mut self.noise_state) as f64;
+        // Low-pass at ~8kHz
+        let lp_coeff = TWO_PI * 8000.0 / sr;
+        self.bp_lp += lp_coeff * (raw_noise - self.bp_lp);
+        // High-pass at ~2kHz
+        let hp_out = self.bp_hp_coeff * (self.bp_hp_prev_out + self.bp_lp - self.bp_hp_prev_in);
+        self.bp_hp_prev_in = self.bp_lp;
+        self.bp_hp_prev_out = hp_out;
+        let noise = hp_out * self.noise_env * 0.8;
         self.noise_env *= self.noise_decay;
 
-        (body + noise) as f32
+        // Transient snap (very short noise burst for attack)
+        let snap = raw_noise * self.snap_env * 0.5;
+        self.snap_env *= self.snap_decay;
+
+        (body + noise + snap) as f32
     }
 }
 
@@ -1531,7 +1560,7 @@ impl ClapOsc {
     fn new(sr: f64) -> Self {
         ClapOsc {
             env: 0.0,
-            decay: (-1.0 / (sr * 0.15)).exp(),
+            decay: (-1.0 / (sr * 0.18)).exp(),
             burst_counter: 0.0,
             burst_env: 0.0,
             noise_state: 11111,
@@ -1539,7 +1568,7 @@ impl ClapOsc {
     }
 
     fn trigger(&mut self, vel: f32) {
-        self.env = vel as f64;
+        self.env = vel as f64 * 0.85;
         self.burst_counter = 0.0;
         self.burst_env = 1.0;
     }
@@ -1550,15 +1579,30 @@ impl ClapOsc {
         }
         let noise = white_noise(&mut self.noise_state) as f64;
 
-        // Multiple short bursts for clap texture
+        // 3-4 rapid bursts simulating multiple hands clapping
+        // Each burst is ~8ms with ~5ms gap — creates the "flam" effect
         self.burst_counter += 1.0;
-        let burst_period = sr * 0.01; // 10ms bursts
-        if self.burst_counter < burst_period * 4.0 {
-            let burst_phase = (self.burst_counter % burst_period) / burst_period;
-            self.burst_env = if burst_phase < 0.3 { 1.0 } else { 0.0 };
+        let burst_len = sr * 0.008;  // 8ms per burst
+        let gap_len = sr * 0.005;    // 5ms gap
+        let cycle = burst_len + gap_len;
+        let num_bursts = 3.0;
+
+        if self.burst_counter < cycle * num_bursts {
+            let phase = self.burst_counter % cycle;
+            self.burst_env = if phase < burst_len {
+                // Within burst: quick attack, quick decay
+                let t = phase / burst_len;
+                if t < 0.1 { t * 10.0 } else { 1.0 - (t - 0.1) * 0.5 }
+            } else {
+                0.05 // near-silence in gap
+            };
+        } else {
+            // After bursts: smooth tail
+            self.burst_env = 1.0;
         }
 
-        let out = noise * self.env * (self.burst_env * 0.5 + 0.5);
+        // Bandpass the noise (~1kHz - 6kHz for clap character)
+        let out = noise * self.env * self.burst_env * 0.7;
         self.env *= self.decay;
         out as f32
     }
