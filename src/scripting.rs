@@ -994,3 +994,130 @@ kick "{beat}"
         assert_eq!(result.pattern[0][2], 3);
     }
 }
+
+/// Export the complete app state as a BFS script.
+/// This is the single source of truth — the .bfs file IS the project.
+pub fn state_to_bfs(
+    bpm: f32, swing: f32, num_steps: usize,
+    banks: &[Vec<Vec<u8>>], active_bank: usize,
+    pad_names: &[String], volumes: &[f32], pans: &[f32],
+    pitches: &[f32], filters: &[f32], reversed: &[bool],
+    reverb_sends: &[f32], delay_sends: &[f32],
+    reverb_mix: f32, delay_mix: f32,
+    master_vol: f32, master_filter: f32,
+    stereo_width: f32, enhancer: f32,
+    sidechain_active: &[bool],
+    synth_assigned: &[bool],
+    note_patterns: &[crate::synth::NotePattern],
+) -> String {
+    let mut out = String::new();
+
+    out.push_str("# BeatForge Studio Project\n");
+    out.push_str(&format!("# Saved: {}\n\n", chrono_now()));
+
+    // Setup
+    out.push_str(&format!("bpm {:.0}\n", bpm));
+    out.push_str(&format!("swing {:.0}\n", swing));
+    out.push_str(&format!("steps {}\n", num_steps));
+    out.push_str("\n");
+
+    // Master
+    if (master_vol - 0.8).abs() > 0.01 { out.push_str(&format!("# Master\n")); }
+    if (master_vol - 0.8).abs() > 0.01 { out.push_str(&format!("vol master {:.2}\n", master_vol)); }
+    if reverb_mix > 0.01 { out.push_str(&format!("reverb {:.2}\n", reverb_mix)); }
+    if delay_mix > 0.01 { out.push_str(&format!("delay {:.2}\n", delay_mix)); }
+    if enhancer > 0.01 { out.push_str(&format!("enhancer {:.2}\n", enhancer)); }
+    if (stereo_width - 1.0).abs() > 0.01 { out.push_str(&format!("width {:.2}\n", stereo_width)); }
+    if master_filter < 19999.0 { out.push_str(&format!("mlpf {:.0}\n", master_filter)); }
+    out.push_str("\n");
+
+    // Export each bank that has data
+    for (bank_idx, bank) in banks.iter().enumerate() {
+        let has_data = bank.iter().any(|row| row[..num_steps].iter().any(|&v| v > 0));
+        if !has_data && bank_idx != active_bank { continue; }
+
+        if banks.iter().filter(|b| b.iter().any(|r| r[..num_steps].iter().any(|&v| v > 0))).count() > 1 {
+            out.push_str(&format!("# Bank {}\n", (b'A' + bank_idx as u8) as char));
+            out.push_str(&format!("section {}\n", bank_idx + 1));
+        }
+
+        // Patterns
+        for (i, row) in bank.iter().enumerate() {
+            let steps = num_steps.min(row.len());
+            let has_hits = row[..steps].iter().any(|&v| v > 0);
+            if !has_hits { continue; }
+
+            let name = pad_names.get(i).map(|s| s.to_lowercase()).unwrap_or(format!("pad{}", i));
+            let pat: String = row[..steps].iter().map(|&v| match v {
+                3 => 'x', 2 => 'o', 1 => '+', _ => '.',
+            }).collect();
+            out.push_str(&format!("{:<8} \"{}\"\n", name, pat));
+        }
+        out.push_str("\n");
+    }
+
+    // Per-pad mix (only non-default values)
+    let mut has_mix = false;
+    for i in 0..pad_names.len().min(16) {
+        let name = pad_names[i].to_lowercase();
+        if (volumes[i] - 0.7).abs() > 0.01 {
+            if !has_mix { out.push_str("# Mix\n"); has_mix = true; }
+            out.push_str(&format!("vol {} {:.2}\n", name, volumes[i]));
+        }
+        if pans[i].abs() > 0.01 {
+            if !has_mix { out.push_str("# Mix\n"); has_mix = true; }
+            out.push_str(&format!("pan {} {:.2}\n", name, pans[i]));
+        }
+        if pitches[i].abs() > 0.01 {
+            out.push_str(&format!("pitch {} {:.0}\n", name, pitches[i]));
+        }
+        if filters[i] < 19999.0 {
+            out.push_str(&format!("lpf {} {:.0}\n", name, filters[i]));
+        }
+        if reverb_sends[i] > 0.01 {
+            out.push_str(&format!("sendverb {} {:.2}\n", name, reverb_sends[i]));
+        }
+        if delay_sends[i] > 0.01 {
+            out.push_str(&format!("senddly {} {:.2}\n", name, delay_sends[i]));
+        }
+        if sidechain_active[i] {
+            out.push_str(&format!("sidechain kick {}\n", name));
+        }
+    }
+    if has_mix { out.push_str("\n"); }
+
+    // Synth assignments
+    for i in 0..pad_names.len().min(16) {
+        if synth_assigned[i] {
+            out.push_str(&format!("synth {} \"{}\"\n", pad_names[i].to_lowercase(), pad_names[i]));
+        }
+    }
+
+    // Note patterns (piano roll data)
+    for (i, np) in note_patterns.iter().enumerate() {
+        if np.notes.is_empty() { continue; }
+        out.push_str(&format!("\n# Piano roll for {}\n", pad_names.get(i).unwrap_or(&format!("pad{}", i))));
+        // Convert notes to BFS notation
+        let mut sorted_notes = np.notes.clone();
+        sorted_notes.sort_by(|a, b| a.start.partial_cmp(&b.start).unwrap());
+        let note_strs: Vec<String> = sorted_notes.iter().map(|n| {
+            let name = crate::theory::midi_to_name(n.note as i32);
+            if n.duration > 1.5 {
+                format!("{}.{:.0}", name, n.duration)
+            } else {
+                name
+            }
+        }).collect();
+        out.push_str(&format!("note \"{}\"\n", note_strs.join(" ")));
+    }
+
+    out
+}
+
+fn chrono_now() -> String {
+    // Simple timestamp without chrono crate
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default().as_secs();
+    format!("{}", secs)
+}

@@ -1311,10 +1311,11 @@ impl eframe::App for BeatForge {
                     }
                     if ui.button(RichText::new("LOAD").size(9.0).color(dim())).clicked() {
                         if let Some(path) = rfd::FileDialog::new()
-                            .add_filter("BeatForge Project", &["bfp"])
+                            .add_filter("BeatForge Script", &["bfs", "bfp"])
                             .pick_file() {
-                            if let Ok(proj) = ProjectData::load(&path) {
-                                self.apply_project(proj);
+                            if let Ok(content) = std::fs::read_to_string(&path) {
+                                self.code_text = content;
+                                self.apply_code_to_grid();
                                 self.project_name = path.file_stem()
                                     .and_then(|s| s.to_str())
                                     .unwrap_or("Untitled").to_string();
@@ -1325,14 +1326,15 @@ impl eframe::App for BeatForge {
                     }
                     if ui.button(RichText::new("SAVE").size(9.0).color(dim())).clicked() {
                         if let Some(path) = rfd::FileDialog::new()
-                            .add_filter("BeatForge Project", &["bfp"])
-                            .set_file_name("beat.bfp")
+                            .add_filter("BeatForge Script", &["bfs"])
+                            .set_file_name("beat.bfs")
                             .save_file() {
-                            let proj = self.to_project();
-                            if let Err(e) = proj.save(&path) {
+                            let bfs = self.export_as_bfs();
+                            if let Err(e) = std::fs::write(&path, &bfs) {
                                 eprintln!("Save error: {e}");
                             } else {
                                 self.project_dirty = false;
+                                self.code_text = bfs;
                                 self.project_name = path.file_stem()
                                     .and_then(|s| s.to_str())
                                     .unwrap_or("Untitled").to_string();
@@ -5346,24 +5348,42 @@ impl BeatForge {
     }
 
     fn quick_save(&mut self) {
+        let bfs = self.export_as_bfs();
         if let Some(ref path) = self.last_save_path.clone() {
-            let proj = self.to_project();
-            if proj.save(path).is_ok() {
+            if std::fs::write(path, &bfs).is_ok() {
                 self.project_dirty = false;
+                self.code_text = bfs;
             }
         } else {
-            // No previous save — open file dialog
             if let Some(path) = rfd::FileDialog::new()
-                .add_filter("BeatForge Project", &["bfp"])
-                .set_file_name("beat.bfp")
+                .add_filter("BeatForge Script", &["bfs"])
+                .set_file_name("beat.bfs")
                 .save_file() {
-                let proj = self.to_project();
-                if proj.save(&path).is_ok() {
+                if std::fs::write(&path, &bfs).is_ok() {
                     self.project_dirty = false;
+                    self.project_name = path.file_stem()
+                        .and_then(|s| s.to_str()).unwrap_or("Untitled").to_string();
                     self.last_save_path = Some(path);
+                    self.code_text = bfs;
                 }
             }
         }
+    }
+
+    fn export_as_bfs(&self) -> String {
+        crate::scripting::state_to_bfs(
+            self.bpm, self.swing, self.num_steps,
+            &self.banks, self.active_bank,
+            &self.pad_names, &self.volumes, &self.pans,
+            &self.pitches, &self.filters, &self.reversed,
+            &self.reverb_sends, &self.delay_sends,
+            self.reverb_mix, self.delay_mix,
+            self.master_vol, self.master_filter,
+            self.stereo_width, self.enhancer_amount,
+            &self.sidechain_active,
+            &self.synth_assigned,
+            &self.note_patterns,
+        )
     }
 
     fn sync_loop_region(&self) {
