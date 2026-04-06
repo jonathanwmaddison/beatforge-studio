@@ -2437,8 +2437,26 @@ impl BeatForge {
 
                     painter.rect_filled(cell_rect, 2.0, bg);
 
-                    // Active cell border
+                    // Mini waveform inside active cells (for sample pads)
                     if vel > 0 {
+                        if let Some(ref peaks) = self.pad_peaks[pad_idx] {
+                            let n = peaks.len().min(cell_rect.width() as usize);
+                            if n > 2 {
+                                let bar_w = cell_rect.width() / n as f32;
+                                let cy = cell_rect.center().y;
+                                for pi in 0..n {
+                                    let h = peaks[pi * peaks.len() / n] * cell_rect.height() * 0.6;
+                                    painter.rect_filled(
+                                        Rect::from_min_size(
+                                            pos2(cell_rect.left() + pi as f32 * bar_w, cy - h * 0.5),
+                                            vec2(bar_w.max(0.5), h.max(0.5)),
+                                        ),
+                                        0.0,
+                                        color_alpha(color, (row_alpha as u16 * 180 / 255) as u8),
+                                    );
+                                }
+                            }
+                        }
                         painter.rect_stroke(cell_rect, 2.0, Stroke::new(0.5, color_alpha(color, row_alpha)));
                     }
 
