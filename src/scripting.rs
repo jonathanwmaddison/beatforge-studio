@@ -102,6 +102,17 @@ fn parse_line(line: &str, num_steps: usize, result: &mut ScriptResult) -> Result
     let cmd = parts[0].to_lowercase();
     let arg = parts.get(1).map(|s| s.trim()).unwrap_or("");
 
+    // Skip lines handled by the extended command parser
+    const EXT_COMMANDS: &[&str] = &[
+        "kit", "loadkit", "synth", "preset", "dist", "distortion", "drive",
+        "crush", "bitcrush", "chorus", "phaser", "send_reverb", "sendverb", "srv",
+        "send_delay", "senddly", "sdl", "sidechain", "sc", "enhancer", "enhance", "enh",
+        "width", "stereo", "master_filter", "mfilter", "mlpf", "bank", "export", "bounce",
+    ];
+    if EXT_COMMANDS.contains(&cmd.as_str()) {
+        return Ok(()); // handled by extract_extended_commands
+    }
+
     match cmd.as_str() {
         // Global commands
         "bpm" | "tempo" => {
