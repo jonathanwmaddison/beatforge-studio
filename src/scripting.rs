@@ -77,8 +77,10 @@ pub enum ScriptCommand {
 
 /// Parse and evaluate a BeatForge Script
 pub fn evaluate(script: &str, num_steps: usize) -> ScriptResult {
-    // First pass: find 'steps' command to get correct pattern length
+    // First pass: find 'steps' command and extract variable definitions
     let mut effective_steps = num_steps;
+    let mut variables: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+
     for line in script.lines() {
         let line = line.trim();
         let parts: Vec<&str> = line.splitn(2, |c: char| c.is_whitespace()).collect();
@@ -86,6 +88,15 @@ pub fn evaluate(script: &str, num_steps: usize) -> ScriptResult {
             if cmd == "steps" || cmd == "length" {
                 if let Some(Ok(s)) = parts.get(1).map(|s| s.trim().parse::<usize>()) {
                     effective_steps = s.clamp(1, 64);
+                }
+            }
+            // Variable definitions: let name = "value" or set name = "value"
+            if (cmd == "let" || cmd == "set" || cmd == "def") && parts.len() >= 2 {
+                let rest = parts[1].trim();
+                if let Some((name, value)) = rest.split_once('=') {
+                    let name = name.trim().to_string();
+                    let value = value.trim().trim_matches('"').to_string();
+                    variables.insert(name, value);
                 }
             }
         }
@@ -100,7 +111,15 @@ pub fn evaluate(script: &str, num_steps: usize) -> ScriptResult {
     };
 
     for (line_num, line) in script.lines().enumerate() {
-        let line = line.trim();
+        let mut line = line.trim().to_string();
+
+        // Variable substitution: replace $name or {name} with stored value
+        for (name, value) in &variables {
+            line = line.replace(&format!("${}", name), value);
+            line = line.replace(&format!("{{{}}}", name), value);
+        }
+
+        let line = line.as_str();
         if line.is_empty() || line.starts_with('#') || line.starts_with("//") {
             continue;
         }
@@ -139,6 +158,7 @@ fn parse_line(line: &str, num_steps: usize, result: &mut ScriptResult) -> Result
 
     // Skip lines handled by the extended command parser
     const EXT_COMMANDS: &[&str] = &[
+        "let", "set", "def", // variable definitions (handled in first pass)
         "kit", "loadkit", "synth", "preset", "dist", "distortion", "drive",
         "crush", "bitcrush", "chorus", "phaser", "send_reverb", "sendverb", "srv",
         "send_delay", "senddly", "sdl", "sidechain", "sc", "enhancer", "enhance", "enh",
@@ -867,5 +887,60 @@ mod deep_tests {
     #[test]
     fn test_full_demo_song() {
         check_song("full_demo", include_str!("../songs/full_production.bfs"));
+    }
+}
+
+#[cfg(test)]
+mod variable_tests {
+    use super::*;
+
+    #[test]
+    fn test_simple_variable() {
+        let script = r#"
+let drums = x...x...
+kick "$drums"
+"#;
+        let result = evaluate(script, 16);
+        assert!(result.errors.is_empty(), "Errors: {:?}", result.errors);
+        assert_eq!(result.pattern[0][0], 3); // kick at step 0
+        assert_eq!(result.pattern[0][4], 3); // kick at step 4
+    }
+
+    #[test]
+    fn test_variable_in_mini_notation() {
+        let script = r#"
+let beat = kick snare hh clap
+"$beat"
+"#;
+        let result = evaluate(script, 16);
+        assert!(result.errors.is_empty(), "Errors: {:?}", result.errors);
+        let total: usize = result.pattern.iter().map(|r| r.iter().filter(|&&v| v > 0).count()).sum();
+        assert!(total >= 4, "Expected 4+ hits from variable pattern, got {}", total);
+    }
+
+    #[test]
+    fn test_multiple_variables() {
+        let script = r#"
+let k = x...x...x...x...
+let s = ....x.......x...
+kick "$k"
+snare "$s"
+"#;
+        let result = evaluate(script, 16);
+        assert!(result.errors.is_empty());
+        assert_eq!(result.pattern[0][0], 3); // kick
+        assert_eq!(result.pattern[1][4], 3); // snare
+    }
+
+    #[test]
+    fn test_curly_brace_variable() {
+        let script = r#"
+let beat = x.x.x.x.
+kick "{beat}"
+"#;
+        let result = evaluate(script, 16);
+        assert!(result.errors.is_empty());
+        assert_eq!(result.pattern[0][0], 3);
+        assert_eq!(result.pattern[0][2], 3);
     }
 }
