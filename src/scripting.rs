@@ -242,23 +242,21 @@ fn parse_line(line: &str, num_steps: usize, result: &mut ScriptResult) -> Result
             }
         }
 
-        // Strudel-style chain: s("...").fast(2).rev()
+        // Strudel-style chain: s("...") or n("...")
         _ if cmd.starts_with("s(") || cmd.starts_with("n(") => {
-            let pat = crate::pattern::parse_chain(line);
-            let events = pat.query(0, result.effective_steps);
-            for evt in &events {
-                let step = (evt.start * result.effective_steps as f32) as usize;
-                if step < result.effective_steps {
-                    match &evt.value {
-                        crate::pattern::Value::Sound(name) => {
-                            if let Some(pad) = pad_index(name) {
-                                result.pattern[pad][step] = 3;
+            // Extract the pattern string from s("...") or n("...")
+            if let Some(start) = line.find('"') {
+                if let Some(end) = line[start+1..].find('"') {
+                    let inner = &line[start+1..start+1+end];
+                    let grid = crate::mini::to_grid(inner, result.effective_steps, 0);
+                    for (name, step) in &grid {
+                        if let Some(pad) = pad_index(name) {
+                            if *step < result.effective_steps {
+                                result.pattern[pad][*step] = 3;
                             }
+                        } else if let Some(note) = parse_note_name(name) {
+                            result.melody_notes.push((note, *step as f32, 1.0));
                         }
-                        crate::pattern::Value::Note(n) => {
-                            result.melody_notes.push((*n, step as f32, 1.0));
-                        }
-                        _ => {}
                     }
                 }
             }
@@ -314,54 +312,18 @@ fn parse_mini_notation(line: &str, _num_steps: usize, result: &mut ScriptResult)
 
     let effective_steps = result.effective_steps;
 
-    // Split into tokens
-    let tokens: Vec<&str> = inner.split_whitespace().collect();
-    if tokens.is_empty() { return Ok(()); }
-
-    // Each token gets an equal share of the steps
-    let steps_per_token = effective_steps / tokens.len().max(1);
-
-    for (i, token) in tokens.iter().enumerate() {
-        let step = i * steps_per_token;
-        if step >= effective_steps { break; }
-
-        // Handle repeat: kick*4
-        if let Some((name, repeat_str)) = token.split_once('*') {
-            if let (Some(pad), Ok(repeats)) = (pad_index(name), repeat_str.parse::<usize>()) {
-                let sub_step = steps_per_token / repeats.max(1);
-                for r in 0..repeats {
-                    let s = step + r * sub_step;
-                    if s < effective_steps {
-                        result.pattern[pad][s] = 3;
-                    }
-                }
+    // Use the proper mini-notation parser
+    let grid = crate::mini::to_grid(inner, effective_steps, 0);
+    for (name, step) in &grid {
+        if let Some(pad) = pad_index(name) {
+            if *step < effective_steps {
+                result.pattern[pad][*step] = 3;
             }
-        }
-        // Handle rest
-        else if *token == "~" || *token == "." || *token == "-" {
-            // rest — do nothing
-        }
-        // Handle [group] — subdivide
-        else if token.starts_with('[') && token.ends_with(']') {
-            let group = &token[1..token.len()-1];
-            let sub_tokens: Vec<&str> = group.split_whitespace().collect();
-            let sub_step = steps_per_token / sub_tokens.len().max(1);
-            for (j, sub_token) in sub_tokens.iter().enumerate() {
-                let s = step + j * sub_step;
-                if s < effective_steps {
-                    if let Some(pad) = pad_index(sub_token) {
-                        result.pattern[pad][s] = 3;
-                    }
-                }
-            }
-        }
-        // Simple pad name
-        else if let Some(pad) = pad_index(token) {
-            result.pattern[pad][step] = 3;
+        } else if let Some(note) = parse_note_name(name) {
+            result.melody_notes.push((note, *step as f32, 1.0));
         }
     }
-
-    Ok(())
+    return Ok(());
 }
 
 /// Format a pattern as BFS script (reverse: grid → code)
