@@ -1,35 +1,20 @@
-# ═══════════════════════════════════════════
-#  "Late Night Study" — Lo-Fi Hip Hop
-#  BeatForge Script Demo Song
-# ═══════════════════════════════════════════
-
+# "Late Night Study" — Lo-Fi Hip Hop
 bpm 78
 swing 35
+steps 32
 reverb 0.35
 delay 0.2
 
-# ── Drums (dusty, laid back) ──────────────
-kick  "x.....x...x....."
-snare "....x.......x..+"
-hh    "x.xox.x.x.xox.x."
-oh    "..........x....."
-rim   "......+.......+."
+kick  "x.....x...x.....x.....x...x....."
+snare "....x.......x.......x.......x..+"
+hh    "x.xox.x.x.xox.x.x.xox.x.x.xox.x."
+oh    "..........x...............x....."
+rim   "......+.......+.......+.......+."
 
-# ── Bass (deep 808 sub) ──────────────────
-note "C2.4 ~ ~ E2.4 ~ ~ G1.4 ~ ~ ~ ~ A1.4 ~ ~ ~"
+vol kick 0.85
+vol snare 0.7
+vol hh 0.5
+vol rim 0.35
+pan hh -0.2
 
-# ── Melody (jazzy rhodes chords) ─────────
-# Use the pad for lo-fi texture
-# Load pad_angel sample on pad 12, set pitch -3
-
-# ── Arrangement ──────────────────────────
-# Bank A: intro (just hats + bass)
-# Bank B: main groove (full drums + bass)
-# Bank C: breakdown (remove kick, add reverb)
-# Bank D: drop (everything + double kick)
-
-# ── Mix notes ────────────────────────────
-# Sidechain bass to kick (SC button in mixer)
-# Hi-hat filter at 4kHz (pad controls → FILT)
-# Master enhancer at 30% for warmth
-# Stereo width at 120% for headphone vibe
+note "C2 ~ ~ ~ Eb2 ~ ~ ~ G1 ~ ~ ~ Ab1 ~ ~ ~ C2 ~ ~ ~ Eb2 ~ ~ ~ G1 ~ ~ ~ ~ ~ ~ ~"

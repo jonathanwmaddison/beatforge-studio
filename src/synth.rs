@@ -118,7 +118,7 @@ impl Default for SynthParams {
             sub_osc: false,
             sub_level: 0.5,
             ring_mod: false,
-            volume: 0.5,
+            volume: 0.3,
             glide: 0.0,
         }
     }

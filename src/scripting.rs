@@ -834,3 +834,71 @@ mod eval_tests {
         assert!(result.errors.is_empty(), "Extended commands should not produce errors: {:?}", result.errors);
     }
 }
+
+#[cfg(test)]
+mod deep_tests {
+    use super::*;
+
+    fn check_song(name: &str, script: &str) {
+        let result = evaluate(script, 16);
+        assert!(result.errors.is_empty(), "Song '{}' errors: {:?}", name, result.errors);
+
+        // Check that at least some pads have data
+        let total_hits: usize = result.pattern.iter()
+            .map(|row| row.iter().filter(|&&v| v > 0).count())
+            .sum();
+        assert!(total_hits > 0, "Song '{}' has no hits at all!", name);
+
+        // Check that pattern length matches effective_steps
+        for (i, row) in result.pattern.iter().enumerate() {
+            assert_eq!(row.len(), result.effective_steps,
+                "Song '{}' pad {} has {} steps, expected {}", name, i, row.len(), result.effective_steps);
+        }
+
+        // Print summary
+        let steps = result.effective_steps;
+        let active_pads: Vec<usize> = result.pattern.iter().enumerate()
+            .filter(|(_, row)| row.iter().any(|&v| v > 0))
+            .map(|(i, _)| i)
+            .collect();
+        let melody_notes = result.melody_notes.len();
+        let commands = result.commands.len();
+        eprintln!("  {} — {} steps, {} active pads {:?}, {} melody notes, {} commands",
+            name, steps, active_pads.len(), active_pads, melody_notes, commands);
+    }
+
+    #[test]
+    fn test_lofi_song() {
+        check_song("lofi", include_str!("../songs/lofi_chill.bfs"));
+    }
+
+    #[test]
+    fn test_trap_song() {
+        check_song("trap", include_str!("../songs/trap_banger.bfs"));
+    }
+
+    #[test]
+    fn test_boom_bap_song() {
+        check_song("boom_bap", include_str!("../songs/boom_bap_soul.bfs"));
+    }
+
+    #[test]
+    fn test_house_song() {
+        check_song("house", include_str!("../songs/house_groove.bfs"));
+    }
+
+    #[test]
+    fn test_jungle_song() {
+        check_song("jungle", include_str!("../songs/jungle_breaks.bfs"));
+    }
+
+    #[test]
+    fn test_edm_song() {
+        check_song("edm", include_str!("../songs/edm_supersaw.bfs"));
+    }
+
+    #[test]
+    fn test_full_demo_song() {
+        check_song("full_demo", include_str!("../songs/full_production.bfs"));
+    }
+}

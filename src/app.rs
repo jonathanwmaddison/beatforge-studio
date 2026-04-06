@@ -3372,7 +3372,7 @@ impl BeatForge {
                     }
                     self.note_patterns[sp].notes.clear();
                     for &(note, start, dur) in &result.melody_notes {
-                        self.note_patterns[sp].add_note(note, start, dur, 0.8);
+                        self.note_patterns[sp].add_note(note, start, dur, 0.55);
                     }
                     self.engine.send(Cmd::SetNotePattern { pad: sp, pattern: self.note_patterns[sp].clone() });
                 }
@@ -3424,7 +3424,7 @@ impl BeatForge {
                 }
                 self.note_patterns[sp].notes.clear();
                 for &(note, start, dur) in &result.melody_notes {
-                    self.note_patterns[sp].add_note(note, start, dur, 0.8);
+                    self.note_patterns[sp].add_note(note, start, dur, 0.55);
                 }
                 self.engine.send(Cmd::SetNotePattern {
                     pad: sp,

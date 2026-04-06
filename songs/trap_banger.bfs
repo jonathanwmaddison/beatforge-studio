@@ -1,43 +1,23 @@
-# ═══════════════════════════════════════════
-#  "SLIDE" — Trap / 808 Banger
-#  BeatForge Script Demo Song
-# ═══════════════════════════════════════════
-
+# "SLIDE" — Trap / 808
 bpm 140
 swing 10
+steps 32
 reverb 0.15
 delay 0.1
 
-# ── Drums (hard hitting, rolling hats) ───
-kick  "x.....x.....x.x."
-snare "....x.......x..."
-hh    "x.xxxxxxxxxxx.xx"
-oh    "..............x."
-clap  "....x.......x..."
+kick  "x.....x.....x.x.x.....x.....x.x."
+snare "....x.......x.......x.......x..."
+hh    "xoxxoxxoxxoxxoxxoxxoxxoxxoxxoxxoxx"
+oh    "..............x...............x."
+clap  "....x.......x.......x.......x..."
 
-# ── Hi-hat velocity pattern ──────────────
-# Use shift+click in sequencer to set:
-# hh velocity: x.oxxoxxoxoxxoxx
-# (alternating hard/soft for bounce)
+vol kick 0.9
+vol snare 0.75
+vol hh 0.45
+vol clap 0.65
+vol oh 0.4
+pan hh 0.15
+lpf hh 7000
+sidechain kick hh
 
-# ── 808 Bass (slides via pitch control) ──
-note "C1.8 ~ ~ ~ ~ ~ ~ ~ E1.4 ~ ~ ~ G1.4 ~ ~ ~"
-
-# ── Lead melody (dark, minor key) ────────
-# Assign synth on pad 13, use "808 Sub" preset
-# Then switch to piano roll and enter:
-note "C4 ~ Eb4 ~ F4 ~ Eb4 ~ C4 ~ ~ ~ Bb3 ~ ~ ~"
-
-# ── Song structure ───────────────────────
-# Bank A: intro — just 808 + hats (8 bars)
-# Bank B: verse — add kick + snare + clap
-# Bank C: chorus — double kick pattern + lead
-# Bank D: bridge — half-time, remove hats
-# Bank E: drop — everything + fast hats
-
-# ── Mix ──────────────────────────────────
-# 808 bass: sidechain to kick, filter at 200Hz
-# Snare: reverb send 20%, delay send 10%
-# Clap: stack with snare (same pattern)
-# Master: enhancer 40%, stereo width 110%
-# Hi-hats: bitcrusher mix 15% for grit
+note "C1 ~ ~ ~ ~ ~ ~ ~ Eb1 ~ ~ ~ G1 ~ ~ ~ C1 ~ ~ ~ ~ ~ ~ ~ Eb1 ~ ~ ~ ~ ~ ~ ~"
