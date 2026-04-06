@@ -140,7 +140,7 @@ fn parse_line(line: &str, num_steps: usize, result: &mut ScriptResult) -> Result
         }
 
         // Pattern transforms
-        "reverse" | "rev" => {
+        "reverse" => {
             if let Some(pad) = pad_index(arg) {
                 reverse_pattern(&mut result.pattern[pad], num_steps);
             }
@@ -500,7 +500,7 @@ pub fn rotate_pattern(row: &mut Vec<u8>, num_steps: usize, amount: i32) {
     let n = num_steps;
     if n == 0 { return; }
     let shift = ((amount % n as i32) + n as i32) as usize % n;
-    let mut temp = row[..n].to_vec();
+    let temp = row[..n].to_vec();
     for i in 0..n {
         row[i] = temp[(i + n - shift) % n];
     }
