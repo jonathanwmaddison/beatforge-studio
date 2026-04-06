@@ -127,6 +127,8 @@ pub struct SharedState {
     pub pad_levels: [AtomicU32; NUM_PADS],
     /// Master peak level
     pub master_level: AtomicU32,
+    /// Per-pad sample playback position (0.0-1.0, for waveform playhead display)
+    pub pad_play_pos: [AtomicU32; NUM_PADS],
 }
 
 impl SharedState {
@@ -137,6 +139,7 @@ impl SharedState {
             triggered: AtomicU32::new(0),
             pad_levels: std::array::from_fn(|_| AtomicU32::new(0)),
             master_level: AtomicU32::new(0),
+            pad_play_pos: std::array::from_fn(|_| AtomicU32::new(0)),
         })
     }
 
@@ -154,6 +157,12 @@ impl SharedState {
 
     pub fn set_master_level(&self, val: f32) {
         self.master_level.store(val.to_bits(), Ordering::Relaxed);
+    }
+
+    pub fn get_pad_play_pos(&self, idx: usize) -> f32 {
+        if idx < NUM_PADS {
+            f32::from_bits(self.pad_play_pos[idx].load(Ordering::Relaxed))
+        } else { 0.0 }
     }
 
     pub fn get_triggered(&self) -> u32 {
@@ -625,9 +634,18 @@ impl AudioState {
             self.recorder.push(frame[0], frame[1]);
         }
 
-        // Write peak levels to shared state (once per buffer)
+        // Write peak levels and playback positions to shared state
         for i in 0..NUM_PADS {
             self.shared.set_pad_level(i, self.pad_peaks[i]);
+            // Sample playback position (0-1)
+            if let Some(ref s) = self.pads[i].sample {
+                if s.playing && !s.data.is_empty() {
+                    let pos = (s.position / s.data.len() as f64).clamp(0.0, 1.0) as f32;
+                    self.shared.pad_play_pos[i].store(pos.to_bits(), Ordering::Relaxed);
+                } else {
+                    self.shared.pad_play_pos[i].store(0f32.to_bits(), Ordering::Relaxed);
+                }
+            }
         }
         self.shared.set_master_level(self.master_peak);
     }

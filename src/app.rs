@@ -3281,6 +3281,18 @@ impl BeatForge {
                     0.0, red(),
                 );
 
+                // Playhead (shows current playback position)
+                let play_pos = self.engine.shared.get_pad_play_pos(sp);
+                if play_pos > 0.001 && play_pos < 0.999 {
+                    let ph_x = rect.left() + play_pos * rect.width();
+                    painter.line_segment(
+                        [pos2(ph_x, rect.top()), pos2(ph_x, rect.bottom())],
+                        Stroke::new(2.0, accent()),
+                    );
+                    // Request repaint to animate the playhead
+                    ui.ctx().request_repaint_after(std::time::Duration::from_millis(16));
+                }
+
                 // Click to preview from position
                 if response.clicked() {
                     if let Some(pos) = response.interact_pointer_pos() {
