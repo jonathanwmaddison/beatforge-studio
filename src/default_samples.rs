@@ -7,6 +7,10 @@ pub struct DefaultSample {
     pub pad_index: usize,
 }
 
+pub fn kit_names() -> Vec<&'static str> {
+    vec!["808 KIT", "MODERN KIT"]
+}
+
 pub fn default_samples() -> Vec<DefaultSample> {
     vec![
         DefaultSample {
@@ -49,6 +53,17 @@ pub fn default_samples() -> Vec<DefaultSample> {
             data: include_bytes!("../samples/cowbell.wav"),
             pad_index: 9,
         },
+    ]
+}
+
+pub fn modern_kit() -> Vec<DefaultSample> {
+    vec![
+        DefaultSample { name: "KICK", data: include_bytes!("../samples/kit2/kick.wav"), pad_index: 0 },
+        DefaultSample { name: "SNARE", data: include_bytes!("../samples/kit2/snare.wav"), pad_index: 1 },
+        DefaultSample { name: "HH-C", data: include_bytes!("../samples/kit2/hihat_closed.wav"), pad_index: 2 },
+        DefaultSample { name: "HH-O", data: include_bytes!("../samples/kit2/hihat_open.wav"), pad_index: 3 },
+        DefaultSample { name: "CLAP", data: include_bytes!("../samples/kit2/clap.wav"), pad_index: 4 },
+        DefaultSample { name: "PERC", data: include_bytes!("../samples/kit2/perc.wav"), pad_index: 8 },
     ]
 }
 
