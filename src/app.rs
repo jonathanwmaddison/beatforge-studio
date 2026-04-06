@@ -345,6 +345,11 @@ pub struct BeatForge {
     mic: MicRecorder,
     mic_recording_for_pad: Option<usize>,
 
+    // Live coding editor
+    code_text: String,
+    code_errors: Vec<String>,
+    code_auto_sync: bool, // auto-sync code ↔ grid
+
     // Pattern template library
     template_lib: TemplateLibrary,
 
@@ -376,7 +381,7 @@ pub struct BeatForge {
 enum PadType { Synth, Sample, Empty, SubSynth }
 
 #[derive(PartialEq, Clone, Copy)]
-enum MainView { Sequencer, PianoRoll, Arrangement }
+enum MainView { Sequencer, PianoRoll, Code, Arrangement }
 
 #[derive(PartialEq, Clone, Copy)]
 enum BottomView { Editor, Mixer, Synth, Slicer, InsertFx }
@@ -438,6 +443,9 @@ impl BeatForge {
             browser_open: false,
             mic: MicRecorder::new(),
             mic_recording_for_pad: None,
+            code_text: String::new(),
+            code_errors: Vec::new(),
+            code_auto_sync: true,
             template_lib: TemplateLibrary::new(),
             last_midi_note: None,
             pad_context_menu: None,
@@ -798,7 +806,8 @@ impl eframe::App for BeatForge {
             if input.key_pressed(Key::Tab) {
                 self.main_view = match self.main_view {
                     MainView::Sequencer => MainView::PianoRoll,
-                    MainView::PianoRoll => MainView::Arrangement,
+                    MainView::PianoRoll => MainView::Code,
+                    MainView::Code => MainView::Arrangement,
                     MainView::Arrangement => MainView::Sequencer,
                 };
             }
@@ -1853,7 +1862,7 @@ impl eframe::App for BeatForge {
         CentralPanel::default().show(ctx, |ui| {
             // View tabs
             ui.horizontal(|ui| {
-                for (view, label) in [(MainView::Sequencer, "SEQUENCER"), (MainView::PianoRoll, "PIANO ROLL"), (MainView::Arrangement, "ARRANGE")] {
+                for (view, label) in [(MainView::Sequencer, "SEQUENCER"), (MainView::PianoRoll, "PIANO ROLL"), (MainView::Code, "CODE"), (MainView::Arrangement, "ARRANGE")] {
                     let color = if self.main_view == view { accent() } else { dim() };
                     if ui.add(Button::new(RichText::new(label).size(9.0).color(color)).frame(false)).clicked() {
                         self.main_view = view;
@@ -1876,6 +1885,7 @@ impl eframe::App for BeatForge {
             match self.main_view {
                 MainView::Sequencer => self.draw_sequencer(ui, current_step),
                 MainView::PianoRoll => self.draw_piano_roll(ui, current_step),
+                MainView::Code => self.draw_code_editor(ui),
                 MainView::Arrangement => self.draw_arrangement(ui),
             }
         });
@@ -3229,6 +3239,135 @@ impl BeatForge {
             // Label
             painter.text(pos2(rect.left() + 4.0, rect.center().y), Align2::LEFT_CENTER,
                 self.auto_target.name(), FontId::monospace(8.0), dim());
+        }
+    }
+
+    fn draw_code_editor(&mut self, ui: &mut Ui) {
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("BEATFORGE SCRIPT").size(10.0).color(Color32::from_rgb(168, 85, 247)).family(FontFamily::Monospace));
+
+            // Sync buttons
+            if ui.add(Button::new(RichText::new("GRID → CODE").size(8.0).color(dim()))).clicked() {
+                // Convert current grid pattern to code
+                self.code_text = crate::scripting::pattern_to_script(
+                    &self.banks[self.active_bank],
+                    self.num_steps,
+                    &self.pad_names,
+                );
+                self.code_text = format!("bpm {:.0}\nswing {:.0}\n\n{}", self.bpm, self.swing, self.code_text);
+                self.code_errors.clear();
+            }
+            if ui.add(Button::new(RichText::new("CODE → GRID").size(8.0).color(accent()))).clicked() {
+                self.apply_code_to_grid();
+            }
+
+            // Auto-sync toggle
+            let auto_color = if self.code_auto_sync { accent() } else { Color32::from_gray(28) };
+            if ui.add(Button::new(RichText::new("AUTO").size(8.0)
+                .color(if self.code_auto_sync { Color32::BLACK } else { dim() }))
+                .fill(auto_color)).clicked() {
+                self.code_auto_sync = !self.code_auto_sync;
+            }
+
+            // Error display
+            if !self.code_errors.is_empty() {
+                ui.label(RichText::new(format!("⚠ {} errors", self.code_errors.len()))
+                    .size(9.0).color(red()).family(FontFamily::Monospace));
+            }
+        });
+
+        ui.separator();
+
+        // Help text
+        ui.label(RichText::new("# Tracker: kick \"x...x...\"  |  Mini: \"kick snare [hh hh] clap\"  |  euclidean kick 3 16")
+            .size(8.0).color(muted_color()).family(FontFamily::Monospace));
+
+        ui.add_space(4.0);
+
+        // Code editor
+        let prev_text = self.code_text.clone();
+        let response = ui.add(
+            egui::TextEdit::multiline(&mut self.code_text)
+                .font(FontId::monospace(12.0))
+                .desired_width(f32::INFINITY)
+                .desired_rows(20)
+                .code_editor()
+        );
+
+        // Auto-sync: if text changed and auto is on, evaluate
+        if self.code_auto_sync && self.code_text != prev_text && response.changed() {
+            self.apply_code_to_grid();
+        }
+
+        // Show errors
+        if !self.code_errors.is_empty() {
+            ui.add_space(4.0);
+            for err in &self.code_errors {
+                ui.label(RichText::new(err).size(9.0).color(red()).family(FontFamily::Monospace));
+            }
+        }
+    }
+
+    fn apply_code_to_grid(&mut self) {
+        let result = crate::scripting::evaluate(&self.code_text, self.num_steps);
+        self.code_errors = result.errors.clone();
+
+        if result.errors.is_empty() {
+            self.push_undo();
+            // Apply pattern
+            for (i, row) in result.pattern.iter().enumerate() {
+                if i < NUM_PADS {
+                    for (j, &v) in row.iter().enumerate() {
+                        if j < self.banks[self.active_bank][i].len() {
+                            self.banks[self.active_bank][i][j] = v;
+                        }
+                    }
+                }
+            }
+            // Apply commands
+            for cmd in &result.commands {
+                match cmd {
+                    crate::scripting::ScriptCommand::SetBpm(v) => {
+                        self.bpm = *v;
+                        self.engine.send(Cmd::SetBpm(*v));
+                    }
+                    crate::scripting::ScriptCommand::SetSwing(v) => {
+                        self.swing = *v;
+                        self.engine.send(Cmd::SetSwing(*v));
+                    }
+                    crate::scripting::ScriptCommand::SetReverb(v) => {
+                        self.reverb_mix = *v;
+                        self.engine.send(Cmd::SetReverb(*v));
+                    }
+                    crate::scripting::ScriptCommand::SetDelay(v) => {
+                        self.delay_mix = *v;
+                        self.engine.send(Cmd::SetDelay(*v));
+                    }
+                    crate::scripting::ScriptCommand::Euclidean(pad, hits, steps) => {
+                        let pattern = crate::generate::generate_complement(
+                            &vec![0u8; *steps],
+                            crate::generate::PatternRole::Offbeat,
+                            *hits as f32 / *steps as f32,
+                            42,
+                        );
+                        // Actually use proper euclidean
+                        for (s, _) in pattern.iter().enumerate() {
+                            if s < self.num_steps && *pad < NUM_PADS {
+                                let pos = (s * *hits) / hits.max(&1);
+                                self.banks[self.active_bank][*pad][s] = 0;
+                            }
+                        }
+                        // Simple euclidean
+                        for i in 0..*hits {
+                            let pos = (i * self.num_steps) / *hits;
+                            if pos < self.num_steps && *pad < NUM_PADS {
+                                self.banks[self.active_bank][*pad][pos] = 3;
+                            }
+                        }
+                    }
+                }
+            }
+            self.sync_pattern();
         }
     }
 

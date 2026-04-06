@@ -15,6 +15,7 @@ mod fx;
 mod mic;
 mod generate;
 mod default_samples;
+mod scripting;
 
 use eframe::egui;
 
