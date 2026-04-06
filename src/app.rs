@@ -316,8 +316,9 @@ pub struct BeatForge {
     // Automation recording — when enabled, knob/slider changes during playback get written to automation
     auto_rec: bool,
 
-    // Piano roll snap grid
+    // Piano roll snap grid and note length
     piano_snap: f32,
+    piano_note_length: f32, // default note length in steps
 
     // Loop region (None = loop entire pattern)
     loop_start: Option<usize>,
@@ -450,6 +451,7 @@ impl BeatForge {
             midi_device_name,
             auto_rec: false,
             piano_snap: 1.0,
+            piano_note_length: 4.0, // default: 1 beat (4 steps)
             loop_start: None,
             loop_end: None,
             show_velocity_lane: true,
@@ -3919,6 +3921,21 @@ impl BeatForge {
 
             ui.separator();
 
+            // Note length selector
+            ui.label(RichText::new("LEN").size(8.0).color(muted_color()).family(FontFamily::Monospace));
+            let lengths = [(1.0, "1"), (2.0, "2"), (4.0, "4"), (8.0, "8"), (16.0, "16")];
+            for (val, label) in lengths {
+                let active = (self.piano_note_length - val).abs() < 0.01;
+                if ui.add(Button::new(RichText::new(label).size(7.0)
+                    .color(if active { Color32::BLACK } else { dim() }))
+                    .fill(if active { Color32::from_rgb(6, 182, 212) } else { Color32::from_gray(28) })
+                    .min_size(vec2(16.0, 14.0))).clicked() {
+                    self.piano_note_length = val;
+                }
+            }
+
+            ui.separator();
+
             // Scale selector
             ui.label(RichText::new("SCALE").size(8.0).color(muted_color()).family(FontFamily::Monospace));
             let scales = [Scale::Chromatic, Scale::Major, Scale::Minor, Scale::Pentatonic, Scale::Blues, Scale::Dorian, Scale::Mixolydian];
@@ -4162,7 +4179,7 @@ impl BeatForge {
                                 let snapped = self.piano_scale.snap(note);
                                 let snap = self.piano_snap;
                                 let snapped_step = (step / snap).round() * snap;
-                                self.note_patterns[sp].add_note(snapped, snapped_step, snap.max(0.25), 0.8);
+                                self.note_patterns[sp].add_note(snapped, snapped_step, self.piano_note_length, 0.8);
                                 // Preview the note
                                 self.engine.send(Cmd::NoteOn { pad: sp, note: snapped, velocity: 0.8 });
                             }
