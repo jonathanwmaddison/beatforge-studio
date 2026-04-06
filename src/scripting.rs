@@ -69,6 +69,8 @@ pub enum ScriptCommand {
     SetPadPan(usize, f32),
     SetPadPitch(usize, f32),
     SetPadFilter(usize, f32),
+    SetSteps(usize),
+    SetBank(usize),
 }
 
 /// Parse and evaluate a BeatForge Script
@@ -102,12 +104,28 @@ fn parse_line(line: &str, num_steps: usize, result: &mut ScriptResult) -> Result
     let cmd = parts[0].to_lowercase();
     let arg = parts.get(1).map(|s| s.trim()).unwrap_or("");
 
+    match cmd.as_str() {
+        "steps" | "length" => {
+            if let Ok(s) = arg.parse::<usize>() {
+                result.commands.push(ScriptCommand::SetSteps(s.clamp(1, 64)));
+            }
+            return Ok(());
+        }
+        "section" => {
+            if let Ok(b) = arg.parse::<usize>() {
+                result.commands.push(ScriptCommand::SetBank(b.saturating_sub(1).min(7)));
+            }
+            return Ok(());
+        }
+        _ => {}
+    }
+
     // Skip lines handled by the extended command parser
     const EXT_COMMANDS: &[&str] = &[
         "kit", "loadkit", "synth", "preset", "dist", "distortion", "drive",
         "crush", "bitcrush", "chorus", "phaser", "send_reverb", "sendverb", "srv",
         "send_delay", "senddly", "sdl", "sidechain", "sc", "enhancer", "enhance", "enh",
-        "width", "stereo", "master_filter", "mfilter", "mlpf", "bank", "export", "bounce",
+        "width", "stereo", "master_filter", "mfilter", "mlpf", "export", "bounce",
     ];
     if EXT_COMMANDS.contains(&cmd.as_str()) {
         return Ok(()); // handled by extract_extended_commands

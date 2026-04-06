@@ -6,6 +6,7 @@
 # ── Setup ────────────────────────────────
 bpm 88
 swing 30
+steps 32
 kit 808
 
 # ── Master chain ─────────────────────────
@@ -13,34 +14,23 @@ reverb 0.25
 delay 0.15
 enhancer 0.3
 width 1.2
-mlpf 18000
 
-# ── Drums ────────────────────────────────
-kick  "x.....x...x....."
-snare "....x.......x..+"
-hh    "x.xox.x.x.xox.x."
-oh    "..........x....."
-clap  "....x.......x..."
-rim   "......+.......+."
+# ── Drums (2-bar loop) ──────────────────
+kick  "x.....x...x.....x.....x.x.x....."
+snare "....x.......x.......x.......x..+"
+hh    "x.xox.x.x.xox.x.x.xox.x.x.xox.x."
+clap  "....x.......x.......x.......x..."
 
 # ── Drum mix ─────────────────────────────
 vol kick 0.9
 vol snare 0.75
 vol hh 0.55
 vol clap 0.6
-vol rim 0.4
 
 pan hh -0.25
-pan oh 0.3
-pan rim 0.4
-
 filter kick 250
 lpf hh 6000
-
-# ── Drum FX ──────────────────────────────
 dist kick 0.15
-sendverb snare 0.2
-senddly rim 0.3
 
 # ── Sidechain ────────────────────────────
 sidechain kick snare
@@ -48,31 +38,18 @@ sidechain kick hh
 
 # ── Synth bass ───────────────────────────
 synth pad10 "808 Sub"
-note "C2.4 ~ ~ Eb2.4 ~ ~ G1.4 ~ ~ ~ ~ Ab1.4 ~ ~ ~"
-
-# ── Pad chords ───────────────────────────
-synth pad11 "Warm Pad"
-# (Use piano roll for chords — Cm7 at step 0, Fm7 at step 8)
+note "C2 ~ ~ ~ Eb2 ~ ~ ~ G1 ~ ~ ~ ~ ~ Ab1 ~ C2 ~ ~ ~ Eb2 ~ ~ ~ G1 ~ ~ ~ ~ ~ ~ ~"
 
 # ── Lead melody ──────────────────────────
 synth pad12 "Saw Lead"
-note "C4 ~ Eb4 ~ G4 ~ Eb4 C4 ~ ~ Bb3 ~ ~ ~ ~ ~"
+note "C4 ~ Eb4 ~ G4 ~ Eb4 C4 ~ ~ Bb3 ~ ~ ~ ~ ~ C4 ~ Eb4 ~ G4 Bb4 G4 Eb4 C4 ~ ~ ~ ~ ~ ~ ~"
 
 # ── Euclidean percussion ─────────────────
-euclidean perc 5 16
-euclidean cowbell 3 16
+euclidean perc 5 32
+euclidean cowbell 3 32
 vol perc 0.3
 vol cowbell 0.25
-pan perc -0.5
-pan cowbell 0.5
 
-# ── This is a complete production! ───────
-# Hit Space to play. Everything above is live —
-# change any value and hear it update instantly.
-#
-# Switch to SEQUENCER tab to see the grid.
-# Switch to PIANO ROLL to see the melody.
-# Switch to MIXER to see the levels.
-#
-# All three views show the SAME data.
-# Code ←→ Grid ←→ Piano Roll ←→ Mixer
+# ── FX sends ─────────────────────────────
+sendverb snare 0.2
+senddly clap 0.3

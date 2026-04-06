@@ -3458,6 +3458,13 @@ impl BeatForge {
                     crate::scripting::ScriptCommand::SetPadFilter(pad, v) => {
                         if *pad < NUM_PADS { self.filters[*pad] = *v; self.engine.send(Cmd::SetPadFilter(*pad, *v)); }
                     }
+                    crate::scripting::ScriptCommand::SetSteps(s) => {
+                        self.num_steps = *s;
+                        self.engine.send(Cmd::SetSteps(*s));
+                    }
+                    crate::scripting::ScriptCommand::SetBank(b) => {
+                        if *b < 8 { self.active_bank = *b; }
+                    }
                 }
             }
 
