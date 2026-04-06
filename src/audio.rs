@@ -190,19 +190,22 @@ impl Engine {
         let (stream, sr) = if let Some(dev) = device {
             if let Ok(supported) = dev.default_output_config() {
                 let sr = supported.sample_rate().0;
-                let config = cpal::StreamConfig {
-                    channels: 2,
-                    sample_rate: supported.sample_rate(),
-                    buffer_size: cpal::BufferSize::Default,
-                };
+                let channels = supported.channels();
+                eprintln!("Audio device: {:?}", dev.name().unwrap_or_default());
+                eprintln!("Sample rate: {}Hz, Channels: {}", sr, channels);
 
+                // Use the device's native config for maximum compatibility
+                // (Bluetooth/AirPods may have specific requirements)
+                let config: cpal::StreamConfig = supported.into();
+
+                let out_channels = config.channels as usize;
                 let mut state = AudioState::new(rx, shared.clone(), spectrum.clone(), sr as f64);
 
                 let stream = dev
                     .build_output_stream(
                         &config,
                         move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                            state.process(data);
+                            state.process_multi(data, out_channels);
                         },
                         |err| eprintln!("Audio error: {err}"),
                         None,
@@ -323,6 +326,31 @@ impl AudioState {
             pad_peaks: [0.0; NUM_PADS],
             master_peak: 0.0,
             peak_decay: (-1.0 / (sr * 0.15)).exp() as f32, // 150ms decay
+        }
+    }
+
+    /// Process audio for multi-channel output (handles stereo, mono, or surround)
+    fn process_multi(&mut self, output: &mut [f32], channels: usize) {
+        let channels = channels.max(1);
+        // Generate stereo into a temp buffer, then distribute to output channels
+        let num_frames = output.len() / channels;
+        let mut stereo_buf = vec![0.0f32; num_frames * 2];
+        self.process(&mut stereo_buf);
+        // Map stereo to output channels
+        for frame in 0..num_frames {
+            let l = stereo_buf[frame * 2];
+            let r = stereo_buf[frame * 2 + 1];
+            let out_start = frame * channels;
+            if channels >= 2 {
+                output[out_start] = l;
+                output[out_start + 1] = r;
+                // Fill remaining channels with silence
+                for ch in 2..channels {
+                    output[out_start + ch] = 0.0;
+                }
+            } else {
+                output[out_start] = (l + r) * 0.5; // mono mixdown
+            }
         }
     }
 
