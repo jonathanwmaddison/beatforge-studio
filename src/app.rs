@@ -368,6 +368,9 @@ pub struct BeatForge {
     last_save_path: Option<std::path::PathBuf>,
     show_about: bool,
 
+    // Welcome screen
+    show_welcome: bool,
+
     // UI
     selected_pad: usize,
     flash_pad: Option<(usize, f64)>, // (pad, time)
@@ -521,6 +524,7 @@ impl BeatForge {
             bottom_view: BottomView::Editor,
             show_help: false,
             show_presets: false,
+            show_welcome: true,
         };
 
         // Load a default beat so the app isn't empty on first launch
@@ -2278,6 +2282,56 @@ impl eframe::App for BeatForge {
                     ui.separator();
                     if ui.button("Close").clicked() {
                         self.show_channel_settings = None;
+                    }
+                });
+        }
+
+
+        // Welcome screen (shown on first launch)
+        if self.show_welcome {
+            let modal_response = egui::Area::new(egui::Id::new("welcome_bg"))
+                .fixed_pos(egui::pos2(0.0, 0.0))
+                .show(ctx, |ui| {
+                    let screen = ctx.screen_rect();
+                    ui.painter().rect_filled(screen, 0.0, Color32::from_black_alpha(200));
+                });
+            Window::new("Welcome to BeatForge Studio")
+                .collapsible(false)
+                .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
+                .default_width(450.0)
+                .show(ctx, |ui| {
+                    ui.label(RichText::new("◈ BEATFORGE STUDIO").size(20.0).strong().color(accent()));
+                    ui.label(RichText::new("Native beatmaking DAW with live coding").size(11.0).color(dim()));
+                    ui.add_space(12.0);
+                    ui.label(RichText::new("QUICK START").size(10.0).strong().color(accent()));
+                    ui.add_space(4.0);
+                    egui::Grid::new("welcome_grid").num_columns(2).spacing([16.0, 6.0]).show(ui, |ui| {
+                        ui.label(RichText::new("Space").family(FontFamily::Monospace).strong());
+                        ui.label("Play / Stop the demo beat");
+                        ui.end_row();
+                        ui.label(RichText::new("808 / MODERN / CHOPS").family(FontFamily::Monospace).strong());
+                        ui.label("Switch drum kit");
+                        ui.end_row();
+                        ui.label(RichText::new("Click grid cells").family(FontFamily::Monospace).strong());
+                        ui.label("Add / remove hits");
+                        ui.end_row();
+                        ui.label(RichText::new("Tab").family(FontFamily::Monospace).strong());
+                        ui.label("Switch views (Seq → Piano → Code → Arrange)");
+                        ui.end_row();
+                        ui.label(RichText::new("Right-click pad").family(FontFamily::Monospace).strong());
+                        ui.label("Load your own samples");
+                        ui.end_row();
+                        ui.label(RichText::new("?").family(FontFamily::Monospace).strong());
+                        ui.label("All keyboard shortcuts");
+                        ui.end_row();
+                    });
+                    ui.add_space(12.0);
+                    ui.label(RichText::new("CODE VIEW: Write beats as code (Tab → Tab)").size(9.0).color(Color32::from_rgb(168, 85, 247)));
+                    ui.label(RichText::new("Try: click a SONGS button to load a demo").size(9.0).color(dim()));
+                    ui.add_space(8.0);
+                    if ui.add(Button::new(RichText::new("▶  Start Making Beats").size(13.0).strong().color(Color32::BLACK))
+                        .fill(accent()).min_size(vec2(250.0, 36.0))).clicked() {
+                        self.show_welcome = false;
                     }
                 });
         }
