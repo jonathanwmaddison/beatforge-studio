@@ -158,6 +158,28 @@ fn parse_line(line: &str, num_steps: usize, result: &mut ScriptResult) -> Result
             }
         }
 
+        // Strudel-style chain: s("...").fast(2).rev()
+        _ if cmd.starts_with("s(") || cmd.starts_with("n(") => {
+            let pat = crate::pattern::parse_chain(line);
+            let events = pat.query(0, num_steps);
+            for evt in &events {
+                let step = (evt.start * num_steps as f32) as usize;
+                if step < num_steps {
+                    match &evt.value {
+                        crate::pattern::Value::Sound(name) => {
+                            if let Some(pad) = pad_index(name) {
+                                result.pattern[pad][step] = 3;
+                            }
+                        }
+                        crate::pattern::Value::Note(n) => {
+                            result.melody_notes.push((*n, step as f32, 1.0));
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+
         // Mini-notation (quoted string on its own line)
         _ if line.starts_with('"') => {
             parse_mini_notation(line, num_steps, result)?;
