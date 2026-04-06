@@ -4,7 +4,7 @@ use crate::midi::{MidiManager, MidiEvent, midi_note_to_pad};
 use crate::synth::{SynthParams, Waveform, FilterType, LfoTarget, NotePattern};
 use crate::slicer;
 use crate::presets;
-use crate::project::ProjectData;
+use crate::project::{ProjectData, TemplateLibrary};
 use crate::automation::{AutomationData, AutoTarget};
 use crate::eq::EqParams;
 use crate::analyzer::NUM_BINS;
@@ -344,8 +344,11 @@ pub struct BeatForge {
     mic: MicRecorder,
     mic_recording_for_pad: Option<usize>,
 
+    // Pattern template library
+    template_lib: TemplateLibrary,
+
     // Pad context menu
-    pad_context_menu: Option<(usize, Pos2)>, // (pad_idx, position)
+    pad_context_menu: Option<(usize, Pos2)>,
 
     // Channel settings popup
     show_channel_settings: Option<usize>,
@@ -431,6 +434,7 @@ impl BeatForge {
             browser_open: false,
             mic: MicRecorder::new(),
             mic_recording_for_pad: None,
+            template_lib: TemplateLibrary::new(),
             pad_context_menu: None,
             show_channel_settings: None,
             project_name: "Untitled".to_string(),
@@ -1836,9 +1840,45 @@ impl eframe::App for BeatForge {
                 .collapsible(false)
                 .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
                 .show(ctx, |ui| {
+                    ui.label(RichText::new("BUILT-IN").size(9.0).color(accent()).family(FontFamily::Monospace));
                     if ui.button("Boom Bap").clicked() { self.load_preset(preset_boom_bap()); self.show_presets = false; }
                     if ui.button("Trap").clicked() { self.load_preset(preset_trap()); self.show_presets = false; }
                     if ui.button("House").clicked() { self.load_preset(preset_house()); self.show_presets = false; }
+
+                    // User templates
+                    if !self.template_lib.templates.is_empty() {
+                        ui.separator();
+                        ui.label(RichText::new("YOUR TEMPLATES").size(9.0).color(accent()).family(FontFamily::Monospace));
+                        let templates = self.template_lib.templates.clone();
+                        for tmpl in &templates {
+                            if ui.button(&tmpl.name).clicked() {
+                                self.push_undo();
+                                for (i, row) in tmpl.pattern.iter().enumerate() {
+                                    if i < NUM_PADS {
+                                        for (j, &v) in row.iter().enumerate() {
+                                            if j < MAX_STEPS {
+                                                self.banks[self.active_bank][i][j] = v;
+                                            }
+                                        }
+                                    }
+                                }
+                                self.sync_pattern();
+                                self.show_presets = false;
+                            }
+                        }
+                    }
+
+                    ui.separator();
+                    // Save current as template
+                    if ui.button(RichText::new("💾 Save Current as Template").color(Color32::from_rgb(6, 182, 212))).clicked() {
+                        let name = format!("Pattern {} ({}BPM)", self.template_lib.templates.len() + 1, self.bpm as u32);
+                        self.template_lib.save_template(
+                            name,
+                            self.banks[self.active_bank].clone(),
+                            self.num_steps,
+                        );
+                    }
+
                     if ui.button(RichText::new("Clear").color(red())).clicked() {
                         self.banks[self.active_bank] = vec![vec![0u8; MAX_STEPS]; NUM_PADS];
                         self.sync_pattern();

@@ -311,3 +311,96 @@ mod tests {
         std::fs::remove_file(&tmp).ok();
     }
 }
+
+/// A named pattern template that can be saved and recalled
+#[derive(Clone)]
+pub struct PatternTemplate {
+    pub name: String,
+    pub pattern: Vec<Vec<u8>>, // [pad][step]
+    pub num_steps: usize,
+}
+
+/// Manages a collection of saved pattern templates
+pub struct TemplateLibrary {
+    pub templates: Vec<PatternTemplate>,
+}
+
+impl TemplateLibrary {
+    pub fn new() -> Self {
+        TemplateLibrary { templates: Vec::new() }
+    }
+
+    pub fn save_template(&mut self, name: String, pattern: Vec<Vec<u8>>, num_steps: usize) {
+        // Replace if name exists
+        self.templates.retain(|t| t.name != name);
+        self.templates.push(PatternTemplate { name, pattern, num_steps });
+    }
+
+    pub fn delete_template(&mut self, name: &str) {
+        self.templates.retain(|t| t.name != name);
+    }
+
+    /// Save all templates to a file
+    pub fn save_to_file(&self, path: &std::path::Path) -> Result<(), String> {
+        let mut out = String::new();
+        for tmpl in &self.templates {
+            out.push_str(&format!("[template:{}:{}]\n", tmpl.name, tmpl.num_steps));
+            for (i, row) in tmpl.pattern.iter().enumerate() {
+                let vals: Vec<String> = row.iter().map(|v| v.to_string()).collect();
+                out.push_str(&format!("{}={}\n", i, vals.join(",")));
+            }
+            out.push('\n');
+        }
+        std::fs::write(path, out).map_err(|e| format!("{e}"))
+    }
+
+    /// Load templates from a file
+    pub fn load_from_file(path: &std::path::Path) -> Result<Self, String> {
+        let content = std::fs::read_to_string(path).map_err(|e| format!("{e}"))?;
+        let mut lib = TemplateLibrary::new();
+        let mut current_name = String::new();
+        let mut current_steps = 16usize;
+        let mut current_pattern: Vec<Vec<u8>> = Vec::new();
+
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() { continue; }
+            if line.starts_with("[template:") && line.ends_with(']') {
+                // Save previous template if any
+                if !current_name.is_empty() && !current_pattern.is_empty() {
+                    lib.templates.push(PatternTemplate {
+                        name: current_name.clone(),
+                        pattern: current_pattern.clone(),
+                        num_steps: current_steps,
+                    });
+                }
+                let inner = &line[10..line.len()-1];
+                if let Some((name, steps)) = inner.rsplit_once(':') {
+                    current_name = name.to_string();
+                    current_steps = steps.parse().unwrap_or(16);
+                }
+                current_pattern = vec![vec![0u8; 64]; 16];
+            } else if let Some((idx_str, vals_str)) = line.split_once('=') {
+                if let Ok(idx) = idx_str.trim().parse::<usize>() {
+                    if idx < 16 {
+                        let vals: Vec<u8> = vals_str.split(',')
+                            .filter_map(|v| v.trim().parse().ok())
+                            .collect();
+                        for (j, &v) in vals.iter().enumerate() {
+                            if j < 64 { current_pattern[idx][j] = v; }
+                        }
+                    }
+                }
+            }
+        }
+        // Don't forget the last template
+        if !current_name.is_empty() && !current_pattern.is_empty() {
+            lib.templates.push(PatternTemplate {
+                name: current_name,
+                pattern: current_pattern,
+                num_steps: current_steps,
+            });
+        }
+        Ok(lib)
+    }
+}
