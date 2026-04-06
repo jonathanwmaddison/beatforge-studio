@@ -842,6 +842,28 @@ impl eframe::App for BeatForge {
                 if input.key_pressed(Key::ArrowLeft) {
                     self.step_cursor = self.step_cursor.checked_sub(1).unwrap_or(self.num_steps - 1);
                 }
+                // Delete key clears the cell at cursor
+                if input.key_pressed(Key::Delete) || input.key_pressed(Key::Backspace) {
+                    let sp = self.selected_pad;
+                    if self.step_cursor < self.num_steps {
+                        self.banks[self.active_bank][sp][self.step_cursor] = 0;
+                        self.engine.send(Cmd::SetCell { pad: sp, step: self.step_cursor, vel: 0 });
+                    }
+                }
+                // Enter advances cursor without placing a hit (rest)
+                if input.key_pressed(Key::Enter) {
+                    self.step_cursor = (self.step_cursor + 1) % self.num_steps;
+                }
+            }
+
+            // Global: Delete key clears selected pad's entire row
+            if !self.step_input && input.key_pressed(Key::Delete) {
+                self.push_undo();
+                let sp = self.selected_pad;
+                for s in 0..self.num_steps {
+                    self.banks[self.active_bank][sp][s] = 0;
+                }
+                self.sync_pattern();
             }
         });
 

@@ -6,7 +6,7 @@ set -e
 ./bundle-macos.sh
 
 APP_NAME="BeatForge Studio"
-DMG_NAME="BeatForge-Studio-v0.3.0"
+DMG_NAME="BeatForge-Studio-v1.0.0"
 DMG_DIR="target/dmg"
 DMG_PATH="target/${DMG_NAME}.dmg"
 
