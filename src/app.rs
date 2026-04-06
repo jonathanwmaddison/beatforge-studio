@@ -3841,6 +3841,46 @@ impl BeatForge {
                 });
             }
 
+            // Chord stamps (one-click chord insertion)
+            ui.separator();
+            ui.label(RichText::new("CHORD").size(8.0).color(muted_color()).family(FontFamily::Monospace));
+            let chord_types: &[(&str, &[i32])] = &[
+                ("MAJ", &[0, 4, 7]),
+                ("MIN", &[0, 3, 7]),
+                ("7th", &[0, 4, 7, 10]),
+                ("m7", &[0, 3, 7, 10]),
+                ("dim", &[0, 3, 6]),
+                ("aug", &[0, 4, 8]),
+                ("sus4", &[0, 5, 7]),
+            ];
+            // Find the last placed note as the root
+            let last_note = self.note_patterns[sp].notes.last().map(|n| (n.note, n.start));
+            for &(name, intervals) in chord_types {
+                if ui.add(Button::new(RichText::new(name).size(7.0).color(dim()))
+                    .min_size(vec2(24.0, 14.0))).clicked() {
+                    if let Some((root, start)) = last_note {
+                        self.push_undo();
+                        // Remove the single root note (we'll replace with chord)
+                        self.note_patterns[sp].notes.retain(|n| !(n.note == root && n.start == start));
+                        // Add all chord tones
+                        let snap = self.piano_snap;
+                        for &interval in intervals {
+                            let note = (root as i32 + interval).clamp(0, 127) as u8;
+                            self.note_patterns[sp].add_note(note, start, snap, 0.8);
+                        }
+                        self.engine.send(Cmd::SetNotePattern {
+                            pad: sp,
+                            pattern: self.note_patterns[sp].clone(),
+                        });
+                        // Preview the chord
+                        for &interval in intervals {
+                            let note = (root as i32 + interval).clamp(0, 127) as u8;
+                            self.engine.send(Cmd::NoteOn { pad: sp, note, velocity: 0.7 });
+                        }
+                    }
+                }
+            }
+
             // Clear piano roll
             if ui.button(RichText::new("CLEAR").size(8.0).color(red())).clicked() {
                 self.push_undo();
