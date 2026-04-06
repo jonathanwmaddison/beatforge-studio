@@ -181,7 +181,7 @@ fn parse_line(line: &str, num_steps: usize, result: &mut ScriptResult) -> Result
 
         // Melody notation
         "note" | "melody" | "notes" => {
-            let notes = parse_melody(arg, num_steps);
+            let notes = parse_melody(arg, result.effective_steps);
             result.melody_notes.extend(notes);
         }
 
@@ -245,10 +245,10 @@ fn parse_line(line: &str, num_steps: usize, result: &mut ScriptResult) -> Result
         // Strudel-style chain: s("...").fast(2).rev()
         _ if cmd.starts_with("s(") || cmd.starts_with("n(") => {
             let pat = crate::pattern::parse_chain(line);
-            let events = pat.query(0, num_steps);
+            let events = pat.query(0, result.effective_steps);
             for evt in &events {
-                let step = (evt.start * num_steps as f32) as usize;
-                if step < num_steps {
+                let step = (evt.start * result.effective_steps as f32) as usize;
+                if step < result.effective_steps {
                     match &evt.value {
                         crate::pattern::Value::Sound(name) => {
                             if let Some(pad) = pad_index(name) {
@@ -291,9 +291,10 @@ fn parse_line(line: &str, num_steps: usize, result: &mut ScriptResult) -> Result
 }
 
 /// Parse tracker-style pattern: x=hard, o=medium, .=rest, -=rest
-fn parse_tracker_pattern(pad: usize, pattern: &str, num_steps: usize, result: &mut ScriptResult) -> Result<(), String> {
+fn parse_tracker_pattern(pad: usize, pattern: &str, _num_steps: usize, result: &mut ScriptResult) -> Result<(), String> {
+    let max_steps = result.pattern[pad].len(); // use actual buffer size
     for (i, ch) in pattern.chars().enumerate() {
-        if i >= num_steps { break; }
+        if i >= max_steps { break; }
         let vel = match ch {
             'x' | 'X' => 3,   // hard hit
             'o' | 'O' => 2,   // medium
@@ -307,20 +308,22 @@ fn parse_tracker_pattern(pad: usize, pattern: &str, num_steps: usize, result: &m
 }
 
 /// Parse Strudel-style mini-notation: "kick snare [hh hh] clap"
-fn parse_mini_notation(line: &str, num_steps: usize, result: &mut ScriptResult) -> Result<(), String> {
+fn parse_mini_notation(line: &str, _num_steps: usize, result: &mut ScriptResult) -> Result<(), String> {
     let inner = line.trim_matches('"').trim();
     if inner.is_empty() { return Ok(()); }
+
+    let effective_steps = result.effective_steps;
 
     // Split into tokens
     let tokens: Vec<&str> = inner.split_whitespace().collect();
     if tokens.is_empty() { return Ok(()); }
 
     // Each token gets an equal share of the steps
-    let steps_per_token = num_steps / tokens.len().max(1);
+    let steps_per_token = effective_steps / tokens.len().max(1);
 
     for (i, token) in tokens.iter().enumerate() {
         let step = i * steps_per_token;
-        if step >= num_steps { break; }
+        if step >= effective_steps { break; }
 
         // Handle repeat: kick*4
         if let Some((name, repeat_str)) = token.split_once('*') {
@@ -328,7 +331,7 @@ fn parse_mini_notation(line: &str, num_steps: usize, result: &mut ScriptResult) 
                 let sub_step = steps_per_token / repeats.max(1);
                 for r in 0..repeats {
                     let s = step + r * sub_step;
-                    if s < num_steps {
+                    if s < effective_steps {
                         result.pattern[pad][s] = 3;
                     }
                 }
@@ -345,7 +348,7 @@ fn parse_mini_notation(line: &str, num_steps: usize, result: &mut ScriptResult) 
             let sub_step = steps_per_token / sub_tokens.len().max(1);
             for (j, sub_token) in sub_tokens.iter().enumerate() {
                 let s = step + j * sub_step;
-                if s < num_steps {
+                if s < effective_steps {
                     if let Some(pad) = pad_index(sub_token) {
                         result.pattern[pad][s] = 3;
                     }
@@ -744,4 +747,90 @@ pub fn extract_extended_commands(script: &str) -> Vec<ExtCommand> {
     script.lines()
         .filter_map(|line| parse_extended(line.trim()))
         .collect()
+}
+
+#[cfg(test)]
+mod eval_tests {
+    use super::*;
+
+    #[test]
+    fn test_steps_command_sets_length() {
+        let result = evaluate("steps 32\nkick \"x...x...x...x...x...x...x...x...\"", 16);
+        assert_eq!(result.effective_steps, 32);
+        assert_eq!(result.pattern[0].len(), 32);
+    }
+
+    #[test]
+    fn test_32_step_pattern_fully_parsed() {
+        let result = evaluate("steps 32\nkick \"x...x...x...x...x...x...x...x...\"", 16);
+        // Should have hits at 0, 4, 8, 12, 16, 20, 24, 28
+        let hits: Vec<usize> = result.pattern[0].iter().enumerate()
+            .filter(|(_, &v)| v > 0).map(|(i, _)| i).collect();
+        assert_eq!(hits, vec![0, 4, 8, 12, 16, 20, 24, 28], "Expected 8 hits across 32 steps");
+    }
+
+    #[test]
+    fn test_pattern_without_steps_uses_default() {
+        let result = evaluate("kick \"x...x...x...x...\"", 16);
+        assert_eq!(result.effective_steps, 16);
+        assert_eq!(result.pattern[0].len(), 16);
+        let hits: usize = result.pattern[0].iter().filter(|&&v| v > 0).count();
+        assert_eq!(hits, 4);
+    }
+
+    #[test]
+    fn test_edm_script_parses_correctly() {
+        let script = include_str!("../songs/edm_supersaw.bfs");
+        let result = evaluate(script, 16);
+        assert_eq!(result.effective_steps, 32, "EDM should set steps to 32");
+        assert!(result.errors.is_empty(), "EDM script errors: {:?}", result.errors);
+
+        // Kick should have hits across full 32 steps
+        let kick_hits: Vec<usize> = result.pattern[0].iter().enumerate()
+            .filter(|(_, &v)| v > 0).map(|(i, _)| i).collect();
+        assert!(kick_hits.len() >= 8, "Kick should have 8+ hits, got {:?}", kick_hits);
+        assert!(*kick_hits.last().unwrap() >= 24, "Last kick hit should be at step 24+, got {:?}", kick_hits);
+    }
+
+    #[test]
+    fn test_full_demo_parses_correctly() {
+        let script = include_str!("../songs/full_production.bfs");
+        let result = evaluate(script, 16);
+        assert_eq!(result.effective_steps, 32);
+        assert!(result.errors.is_empty(), "Full demo errors: {:?}", result.errors);
+    }
+
+    #[test]
+    fn test_all_demo_songs_parse_without_errors() {
+        let songs = [
+            ("lofi", include_str!("../songs/lofi_chill.bfs")),
+            ("trap", include_str!("../songs/trap_banger.bfs")),
+            ("boom_bap", include_str!("../songs/boom_bap_soul.bfs")),
+            ("house", include_str!("../songs/house_groove.bfs")),
+            ("jungle", include_str!("../songs/jungle_breaks.bfs")),
+            ("edm", include_str!("../songs/edm_supersaw.bfs")),
+            ("full", include_str!("../songs/full_production.bfs")),
+            ("tutorial", include_str!("../songs/strudel_showcase.bfs")),
+        ];
+        for (name, script) in songs {
+            let result = evaluate(script, 16);
+            assert!(result.errors.is_empty(), "Song '{}' has errors: {:?}", name, result.errors);
+        }
+    }
+
+    #[test]
+    fn test_velocity_chars() {
+        let result = evaluate("kick \"xo+.xo+.\"", 8);
+        assert_eq!(result.pattern[0][0], 3); // x = hard
+        assert_eq!(result.pattern[0][1], 2); // o = medium
+        assert_eq!(result.pattern[0][2], 1); // + = soft
+        assert_eq!(result.pattern[0][3], 0); // . = rest
+    }
+
+    #[test]
+    fn test_extended_commands_dont_error() {
+        let script = "kit 808\nsynth pad10 \"808 Sub\"\nsidechain kick snare\nenhancer 0.3\nwidth 1.2";
+        let result = evaluate(script, 16);
+        assert!(result.errors.is_empty(), "Extended commands should not produce errors: {:?}", result.errors);
+    }
 }
