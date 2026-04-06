@@ -2250,8 +2250,29 @@ impl BeatForge {
         let num_rows = pads.len();
         let num_steps = self.num_steps;
 
-        // Zoom controls
+        // Zoom controls + AI generate
         ui.horizontal(|ui| {
+            // Generate complementary patterns from kick
+            if ui.add(Button::new(RichText::new("⚡ GENERATE").size(8.0)
+                .color(Color32::BLACK)).fill(Color32::from_rgb(168, 85, 247))
+                .min_size(vec2(65.0, 16.0))).clicked() {
+                self.push_undo();
+                let kick = self.banks[self.active_bank][0].clone();
+                let seed = simple_rng();
+                let kit = crate::generate::generate_full_kit(&kick[..self.num_steps], 0.6, seed);
+                for (i, pat) in kit.iter().enumerate() {
+                    if i < NUM_PADS {
+                        for (s, &v) in pat.iter().enumerate() {
+                            if s < self.num_steps {
+                                self.banks[self.active_bank][i][s] = v;
+                            }
+                        }
+                    }
+                }
+                self.sync_pattern();
+            }
+
+            ui.separator();
             ui.label(RichText::new(format!("ZOOM {:.0}%", self.seq_zoom * 100.0))
                 .size(8.0).color(muted_color()).family(FontFamily::Monospace));
             if ui.add(Button::new(RichText::new("−").size(10.0).color(dim()))

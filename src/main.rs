@@ -13,6 +13,7 @@ mod analyzer;
 mod midi;
 mod fx;
 mod mic;
+mod generate;
 
 use eframe::egui;
 
