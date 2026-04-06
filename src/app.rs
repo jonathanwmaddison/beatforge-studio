@@ -543,6 +543,21 @@ impl BeatForge {
     }
 
     fn load_default_beat(&mut self) {
+        // Load embedded sample pack onto pads (replaces synth voices with real samples)
+        for ds in crate::default_samples::default_samples() {
+            if let Some((data, sr)) = crate::default_samples::decode_wav_bytes(ds.data) {
+                let peaks = audio::compute_peaks(&data, 200);
+                self.pad_peaks[ds.pad_index] = Some(peaks);
+                self.pad_names[ds.pad_index] = ds.name.to_string();
+                self.pad_types[ds.pad_index] = PadType::Sample;
+                self.engine.send(Cmd::LoadSample {
+                    pad: ds.pad_index,
+                    data: std::sync::Arc::new(data),
+                    original_sr: sr,
+                });
+            }
+        }
+
         // Boom Bap pattern in Bank A
         let bank = &mut self.banks[0];
         // Kick
