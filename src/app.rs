@@ -3347,6 +3347,11 @@ impl BeatForge {
             let result = crate::scripting::evaluate(&self.code_text, self.num_steps);
             self.code_errors = result.errors.clone();
             if result.errors.is_empty() {
+                // Apply step count from script
+                if result.effective_steps != self.num_steps {
+                    self.num_steps = result.effective_steps;
+                    self.engine.send(Cmd::SetSteps(self.num_steps));
+                }
                 // Apply pattern silently (no undo push for live coding)
                 for (i, row) in result.pattern.iter().enumerate() {
                     if i < NUM_PADS {
@@ -3400,6 +3405,12 @@ impl BeatForge {
 
         if result.errors.is_empty() {
             self.push_undo();
+
+            // Apply effective step count from script
+            if result.effective_steps != self.num_steps {
+                self.num_steps = result.effective_steps;
+                self.engine.send(Cmd::SetSteps(self.num_steps));
+            }
 
             // Apply melody notes to piano roll (on selected synth pad)
             if !result.melody_notes.is_empty() {

@@ -56,6 +56,8 @@ pub struct ScriptResult {
     pub commands: Vec<ScriptCommand>,
     /// Error messages
     pub errors: Vec<String>,
+    /// Effective step count (may differ from input if 'steps' command used)
+    pub effective_steps: usize,
 }
 
 #[derive(Clone)]
@@ -75,11 +77,26 @@ pub enum ScriptCommand {
 
 /// Parse and evaluate a BeatForge Script
 pub fn evaluate(script: &str, num_steps: usize) -> ScriptResult {
+    // First pass: find 'steps' command to get correct pattern length
+    let mut effective_steps = num_steps;
+    for line in script.lines() {
+        let line = line.trim();
+        let parts: Vec<&str> = line.splitn(2, |c: char| c.is_whitespace()).collect();
+        if let Some(&cmd) = parts.first() {
+            if cmd == "steps" || cmd == "length" {
+                if let Some(Ok(s)) = parts.get(1).map(|s| s.trim().parse::<usize>()) {
+                    effective_steps = s.clamp(1, 64);
+                }
+            }
+        }
+    }
+
     let mut result = ScriptResult {
-        pattern: vec![vec![0u8; num_steps]; NUM_PADS],
+        pattern: vec![vec![0u8; effective_steps]; NUM_PADS],
         melody_notes: Vec::new(),
         commands: Vec::new(),
         errors: Vec::new(),
+        effective_steps,
     };
 
     for (line_num, line) in script.lines().enumerate() {
