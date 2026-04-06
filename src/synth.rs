@@ -308,20 +308,22 @@ impl SynthVoice {
                 osc1 * (1.0 - mix) + osc2 * mix
             };
 
-            // Add unison voices (detuned copies of osc1)
+            // Add unison voices (detuned copies — use phase accumulation trick)
             let mut unison_sum = combined;
             if params.unison_voices > 1 {
                 let n = params.unison_voices as f64;
-                let spread = params.unison_detune as f64; // cents
+                let spread = params.unison_detune as f64;
                 for v in 1..params.unison_voices {
+                    // Spread voices evenly from -spread to +spread cents
                     let detune_cents = spread * (v as f64 / (n - 1.0) * 2.0 - 1.0);
                     let detune_ratio = 2.0f64.powf(detune_cents / 1200.0);
-                    let uni_freq = freq1 * detune_ratio;
-                    // Use osc1_phase with offset for each voice (approximate)
-                    let uni_phase = (self.osc1_phase + v as f64 * 0.1337) % 1.0;
-                    unison_sum += oscillate(params.osc1_wave, uni_phase) / n;
+                    // Each voice runs at a slightly different frequency
+                    // Use osc1_phase scaled by the detune ratio (accumulates drift over time = real detuning)
+                    let uni_phase = (self.osc1_phase * detune_ratio + v as f64 * 0.17) % 1.0;
+                    unison_sum += oscillate(params.osc1_wave, uni_phase);
                 }
-                unison_sum /= 1.0 + (params.unison_voices - 1) as f64 * 0.5; // normalize
+                // Normalize: divide by total voice count
+                unison_sum /= n;
             }
 
             // Sub oscillator (1 octave below osc1)
@@ -480,13 +482,18 @@ impl VoiceFilter {
 
     fn set(&mut self, ftype: FilterType, cutoff: f64, q: f64, sr: f64) {
         self.filter_type = ftype;
-        self.f = (2.0 * (PI * cutoff / sr).sin()).min(0.99);
-        self.q = 1.0 / q;
+        // Clamp cutoff to prevent instability
+        let cutoff = cutoff.clamp(20.0, sr * 0.45);
+        self.f = (2.0 * (PI * cutoff / sr).sin()).min(0.95);
+        // Map Q: higher values = more resonance, approaches self-oscillation
+        self.q = (1.0 / q).max(0.01);
     }
 
     fn tick(&mut self, input: f32) -> f32 {
         let inp = input as f64;
-        self.hp = inp - self.lp - self.bp * self.q;
+        // Soft-clip the feedback to prevent blowup at high resonance
+        let bp_clipped = (self.bp * 1.2).tanh() / 1.2;
+        self.hp = inp - self.lp - bp_clipped * self.q;
         self.bp += self.f * self.hp;
         self.lp += self.f * self.bp;
 
