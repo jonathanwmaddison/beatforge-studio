@@ -3872,6 +3872,46 @@ impl BeatForge {
                 });
             }
 
+            // Arpeggiator (generate arpeggiated patterns from held chord)
+            ui.separator();
+            ui.label(RichText::new("ARP").size(8.0).color(Color32::from_rgb(168, 85, 247)).family(FontFamily::Monospace));
+            {
+                use crate::synth::ArpMode;
+                let modes = [ArpMode::Off, ArpMode::Up, ArpMode::Down, ArpMode::UpDown, ArpMode::Random];
+                for mode in modes {
+                    let active = false; // arp state would need to be in app — simplified: generate pattern on click
+                    if ui.add(Button::new(RichText::new(mode.name()).size(7.0)
+                        .color(dim())).fill(Color32::from_gray(28))
+                        .min_size(vec2(20.0, 14.0))).clicked() && mode != ArpMode::Off {
+                        // Generate an arpeggiated pattern from existing notes in the piano roll
+                        if !self.note_patterns[sp].notes.is_empty() {
+                            self.push_undo();
+                            let mut notes: Vec<u8> = self.note_patterns[sp].notes.iter().map(|n| n.note).collect();
+                            notes.sort();
+                            notes.dedup();
+                            if !notes.is_empty() {
+                                // Clear existing and generate arp pattern
+                                self.note_patterns[sp].notes.clear();
+                                let mut arp = crate::synth::Arpeggiator::new();
+                                arp.mode = mode;
+                                arp.rate_steps = 1;
+                                for &n in &notes { arp.note_on(n); }
+                                let snap = self.piano_snap;
+                                for step in 0..self.num_steps {
+                                    if let Some(note) = arp.tick() {
+                                        self.note_patterns[sp].add_note(note, step as f32 * snap, snap, 0.8);
+                                    }
+                                }
+                                self.engine.send(Cmd::SetNotePattern {
+                                    pad: sp,
+                                    pattern: self.note_patterns[sp].clone(),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
             // Chord stamps (one-click chord insertion)
             ui.separator();
             ui.label(RichText::new("CHORD").size(8.0).color(muted_color()).family(FontFamily::Monospace));

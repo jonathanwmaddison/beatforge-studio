@@ -720,3 +720,122 @@ pub fn morph_oscillate(phase: f64, morph: f64) -> f64 {
         saw * (1.0 - t) + square * t
     }
 }
+
+// ═══════════════════════════════════════════════════════════
+//  ARPEGGIATOR
+// ═══════════════════════════════════════════════════════════
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum ArpMode {
+    Off,
+    Up,
+    Down,
+    UpDown,
+    Random,
+}
+
+impl ArpMode {
+    pub fn name(&self) -> &'static str {
+        match self {
+            ArpMode::Off => "OFF",
+            ArpMode::Up => "UP",
+            ArpMode::Down => "DOWN",
+            ArpMode::UpDown => "U/D",
+            ArpMode::Random => "RND",
+        }
+    }
+}
+
+pub struct Arpeggiator {
+    pub mode: ArpMode,
+    pub held_notes: Vec<u8>,
+    pub rate_steps: usize,  // steps per note (1=16th, 2=8th, 4=quarter)
+    step_counter: usize,
+    note_index: usize,
+    direction: i32, // 1=up, -1=down (for UpDown mode)
+    rng: u32,
+}
+
+impl Arpeggiator {
+    pub fn new() -> Self {
+        Arpeggiator {
+            mode: ArpMode::Off,
+            held_notes: Vec::new(),
+            rate_steps: 1,
+            step_counter: 0,
+            note_index: 0,
+            direction: 1,
+            rng: 42,
+        }
+    }
+
+    pub fn note_on(&mut self, note: u8) {
+        if !self.held_notes.contains(&note) {
+            self.held_notes.push(note);
+            self.held_notes.sort();
+        }
+    }
+
+    pub fn note_off(&mut self, note: u8) {
+        self.held_notes.retain(|&n| n != note);
+        if self.held_notes.is_empty() {
+            self.note_index = 0;
+            self.step_counter = 0;
+        }
+    }
+
+    /// Call on each sequencer step. Returns Some(note) if the arp should trigger.
+    pub fn tick(&mut self) -> Option<u8> {
+        if self.mode == ArpMode::Off || self.held_notes.is_empty() {
+            return None;
+        }
+
+        self.step_counter += 1;
+        if self.step_counter < self.rate_steps {
+            return None;
+        }
+        self.step_counter = 0;
+
+        let n = self.held_notes.len();
+        let note = match self.mode {
+            ArpMode::Up => {
+                let note = self.held_notes[self.note_index % n];
+                self.note_index = (self.note_index + 1) % n;
+                note
+            }
+            ArpMode::Down => {
+                let idx = n - 1 - (self.note_index % n);
+                let note = self.held_notes[idx];
+                self.note_index = (self.note_index + 1) % n;
+                note
+            }
+            ArpMode::UpDown => {
+                let note = self.held_notes[self.note_index];
+                self.note_index = (self.note_index as i32 + self.direction) as usize;
+                if self.note_index >= n {
+                    self.note_index = if n > 1 { n - 2 } else { 0 };
+                    self.direction = -1;
+                }
+                if self.note_index == 0 && self.direction == -1 {
+                    self.direction = 1;
+                }
+                note
+            }
+            ArpMode::Random => {
+                self.rng ^= self.rng << 13;
+                self.rng ^= self.rng >> 17;
+                self.rng ^= self.rng << 5;
+                self.held_notes[(self.rng as usize) % n]
+            }
+            ArpMode::Off => unreachable!(),
+        };
+
+        Some(note)
+    }
+
+    pub fn clear(&mut self) {
+        self.held_notes.clear();
+        self.note_index = 0;
+        self.step_counter = 0;
+    }
+}
