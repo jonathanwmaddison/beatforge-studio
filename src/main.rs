@@ -17,6 +17,7 @@ mod generate;
 mod default_samples;
 mod scripting;
 mod pattern;
+mod mini;
 
 use eframe::egui;
 
