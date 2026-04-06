@@ -1452,27 +1452,38 @@ impl SnareOsc {
 struct HiHatOsc {
     env: f64,
     decay: f64,
+    // 6 high-frequency sine partials (inharmonic, like real metal)
     phases: [f64; 6],
     freqs: [f64; 6],
     noise_state: u32,
+    // Simple high-pass filter state (removes muddiness)
+    hp_prev_in: f64,
+    hp_prev_out: f64,
+    hp_coeff: f64,
     _open: bool,
 }
 
 impl HiHatOsc {
     fn new(sr: f64, open: bool) -> Self {
-        let decay_time = if open { 0.25 } else { 0.04 };
+        let decay_time = if open { 0.3 } else { 0.035 };
+        // High-pass at ~7kHz to keep it crisp
+        let hp_coeff = 1.0 / (1.0 + 2.0 * std::f64::consts::PI * 7000.0 / sr);
         HiHatOsc {
             env: 0.0,
             decay: (-1.0 / (sr * decay_time)).exp(),
             phases: [0.0; 6],
-            freqs: [205.3, 304.4, 369.6, 522.7, 540.5, 587.2],
+            // High inharmonic frequencies — sounds like vibrating metal
+            freqs: [3048.0, 3570.0, 4165.0, 5073.0, 5954.0, 6913.0],
             noise_state: 67890,
+            hp_prev_in: 0.0,
+            hp_prev_out: 0.0,
+            hp_coeff,
             _open: open,
         }
     }
 
     fn trigger(&mut self, vel: f32) {
-        self.env = vel as f64 * 0.5;
+        self.env = vel as f64 * 0.45;
         self.phases = [0.0; 6];
     }
 
@@ -1480,22 +1491,28 @@ impl HiHatOsc {
         if self.env < 0.001 {
             return 0.0;
         }
-        // Metallic component: sum of inharmonic square waves
+
+        // Metallic shimmer: sum of high-frequency sine partials (NOT square waves)
         let mut metallic = 0.0f64;
         for i in 0..6 {
             self.phases[i] += self.freqs[i] / sr;
-            metallic += if (self.phases[i] * TWO_PI).sin() > 0.0 {
-                1.0
-            } else {
-                -1.0
-            };
+            if self.phases[i] >= 1.0 { self.phases[i] -= 1.0; }
+            metallic += (self.phases[i] * TWO_PI).sin();
         }
         metallic /= 6.0;
 
-        // Filtered noise
-        let noise = white_noise(&mut self.noise_state) as f64 * 0.3;
+        // Bandpass-filtered noise (the main body of a hi-hat sound)
+        let noise = white_noise(&mut self.noise_state) as f64;
 
-        let out = (metallic * 0.7 + noise * 0.3) * self.env;
+        // Mix: mostly noise with metallic shimmer on top
+        let raw = noise * 0.65 + metallic * 0.35;
+
+        // High-pass filter to remove low-end mud
+        let hp_out = self.hp_coeff * (self.hp_prev_out + raw - self.hp_prev_in);
+        self.hp_prev_in = raw;
+        self.hp_prev_out = hp_out;
+
+        let out = hp_out * self.env;
         self.env *= self.decay;
         out as f32
     }
